@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.21
+// @version      0.0.22
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -959,6 +959,7 @@
   .sc-msg-time { font-size: 9px; color: #555; }
   .sc-msg-text { color: #e8e8e8; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
   .sc-msg.action .sc-msg-text { color: #888; font-style: italic; }
+  .sc-mention { color: #00f1ff; font-weight: 600; }
   .sc-msg-admin-tag { font-size: 8px; font-weight: 700; color: #ff2262;
     background: rgba(255,34,98,0.1); border: 1px solid rgba(255,34,98,0.3);
     padding: 0 4px; border-radius: 2px; text-transform: uppercase; letter-spacing: .5px; }
@@ -1298,13 +1299,13 @@
       renderChatMessages();
     });
     S.ui.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitInput(); return; }
       if (S.ui.mentionDropdown.style.display !== 'none') {
         if (e.key === 'ArrowDown') { e.preventDefault(); selectNextMention(1); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); selectNextMention(-1); return; }
         if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptMention(); return; }
         if (e.key === 'Escape') { closeMentionDropdown(); return; }
       }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitInput(); }
     });
     S.ui.input.addEventListener('input', () => { autoGrowInput(); sendTyping(true); updateMention(); });
     S.ui.send.addEventListener('click', submitInput);
@@ -1652,6 +1653,16 @@
     const nameEl = document.createElement('span');
     nameEl.className = 'sc-msg-name';
     nameEl.textContent = msg.name || 'unknown';
+    nameEl.style.cursor = 'pointer';
+    nameEl.title = 'Click to @mention';
+    nameEl.addEventListener('click', () => {
+      S.ui.input.focus();
+      const val = S.ui.input.value;
+      const pos = S.ui.input.selectionStart;
+      S.ui.input.value = val.slice(0, pos) + '@' + (msg.name || 'unknown') + ' ' + val.slice(pos);
+      S.ui.input.selectionStart = S.ui.input.selectionEnd = pos + (msg.name || 'unknown').length + 2;
+      S.ui.input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     header.appendChild(nameEl);
     if (msg.isAdmin) {
       const tag = document.createElement('span');
@@ -1682,24 +1693,41 @@
     return el;
   }
 
-  // Build a DOM fragment from text, converting URLs to <a> elements.
-  // All non-URL text is added via createTextNode — never parsed as HTML.
+  // Build a DOM fragment from text, converting URLs to <a> elements
+  // and @mentions to styled spans. XSS-safe (all text via createTextNode).
   function linkifyText(text) {
     const frag = document.createDocumentFragment();
-    const regex = /https?:\/\/[^\s<>"'\[\]()]+/gi;
+    const regex = /(https?:\/\/[^\s<>"'\[\]()]+)|(@\w+)/gi;
     let last = 0;
     let match;
     while ((match = regex.exec(text)) !== null) {
       if (match.index > last) {
         frag.appendChild(document.createTextNode(text.slice(last, match.index)));
       }
-      const a = document.createElement('a');
-      a.href = match[0];
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer nofollow';
-      a.className = 'sc-link';
-      a.textContent = match[0];
-      frag.appendChild(a);
+      if (match[1]) {
+        const a = document.createElement('a');
+        a.href = match[1];
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer nofollow';
+        a.className = 'sc-link';
+        a.textContent = match[1];
+        frag.appendChild(a);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'sc-mention';
+        span.textContent = match[2];
+        span.style.cursor = 'pointer';
+        span.addEventListener('click', () => {
+          S.ui.input.focus();
+          const val = S.ui.input.value;
+          const pos = S.ui.input.selectionStart;
+          const mention = match[2] + ' ';
+          S.ui.input.value = val.slice(0, pos) + mention + val.slice(pos);
+          S.ui.input.selectionStart = S.ui.input.selectionEnd = pos + mention.length;
+          S.ui.input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        frag.appendChild(span);
+      }
       last = match.index + match[0].length;
     }
     if (last < text.length) {
