@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.6
+// @version      0.0.7
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.6';
+  const VERSION = '0.0.7';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -304,7 +304,7 @@
     if (S.ui.emojiBtn) S.ui.emojiBtn.disabled = !enabled;
     if (S.ui.input) {
       S.ui.input.placeholder = enabled
-        ? 'Type a message… (Enter=send, Shift+Enter=newline)'
+        ? 'Message… /rs = latest solve in chat'
         : 'Connecting…';
     }
     // Add/remove disabled class on chat body
@@ -1265,6 +1265,16 @@
     S.ui.input.value = '';
     autoGrowInput();
     sendTyping(false);
+    if (text.startsWith('/rs')) {
+      const myActivity = S.activity.slice().reverse().find(e => e.userId === S.myId);
+      if (myActivity) {
+        const line = (myActivity.time || '?') + ' (' + (myActivity.moves || '0') + ' / ' + (myActivity.tps || '0') + ') in session ' + (myActivity.session || 'Unknown');
+        sendChat(line);
+      } else {
+        sendChat('No solves yet.');
+      }
+      return;
+    }
     sendChat(text);
   }
 
@@ -1934,7 +1944,7 @@
       ]},
       { title: 'About', rows: [
         { label: 'SlidySim Chat v' + VERSION,
-          desc: 'Random bright color per session. Egg-themed emoji panel.',
+          desc: 'Random bright color per session. Egg-themed emoji panel. /rs = post latest solve in chat.',
           control: null },
       ]},
     ];
