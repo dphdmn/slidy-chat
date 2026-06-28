@@ -441,7 +441,7 @@
     S.recentJoins = [];
     for (const u of data.users) {
       S.users.set(u.id, u);
-      if (u.id !== S.myId && u.name !== 'Egg' && !u.isAdmin && S.recentJoins.length < 5) {
+      if (u.id !== S.myId && !u.name.startsWith('Egg') && !u.isAdmin && S.recentJoins.length < 5) {
         S.recentJoins.push({ id: u.id, name: u.name, color: u.color });
       }
     }
@@ -455,7 +455,7 @@
     renderUsers();
     renderOnlineCount();
       S.recentJoins = S.recentJoins.filter(j => j.id !== data.user.id);
-    if (data.user.name === 'Egg' || data.user.isAdmin) return;
+    if (data.user.name.startsWith('Egg') || data.user.isAdmin) return;
     S.recentJoins.unshift({ id: data.user.id, name: data.user.name, color: data.user.color });
     if (S.recentJoins.length > 10) S.recentJoins.length = 10;
     renderRecentUsers();
