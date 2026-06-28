@@ -292,6 +292,11 @@
       state === 'connecting' ? 'connecting' :
       state === 'error' ? 'error' : ''
     );
+    if (S.ui.connStatus) {
+      const labels = { authed: '', connected: '', connecting: 'connecting…', error: 'error', disconnected: 'offline' };
+      S.ui.connStatus.textContent = labels[state] || '';
+      S.ui.connStatus.className = 'sc-conn-status' + (labels[state] ? ' ' + state : '');
+    }
     // Disable input/send when not authed
     const enabled = state === 'authed';
     if (S.ui.input) S.ui.input.disabled = !enabled;
@@ -901,6 +906,9 @@
   }
   .sc-version { font-size: 9px; font-weight: 500; color: #555; letter-spacing: .3px;
     white-space: nowrap; flex-shrink: 0; }
+  .sc-conn-status { font-size: 9px; font-weight: 500; color: #888; white-space: nowrap; flex-shrink: 0; }
+  .sc-conn-status.error { color: #ff2262; }
+  .sc-conn-status.connecting { color: #ffff00; }
   .sc-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; transition: all .2s; flex-shrink: 0; }
   .sc-status-dot.connected { background: #00f1ff; box-shadow: 0 0 6px #00f1ff, 0 0 12px rgba(0,188,212,0.4); }
   .sc-status-dot.connecting { background: #ffff00; box-shadow: 0 0 6px #ffff00; animation: sc-pulse 1s infinite; }
@@ -1184,6 +1192,7 @@
         <div class="sc-header" id="header">
           <span class="sc-status-dot" id="statusDot"></span>
           <span class="sc-version" id="version"></span>
+          <span class="sc-conn-status" id="connStatus"></span>
           <span class="sc-online-count" id="onlineCount">0</span>
           <span class="sc-recent-users" id="recentUsers"></span>
           <span class="sc-header-spacer"></span>
@@ -1238,7 +1247,7 @@
     S.ui = {
       host, shadow, root,
       chat: $('chat'), header: $('header'), statusDot: $('statusDot'),
-      onlineCount: $('onlineCount'), recentUsers: $('recentUsers'), version: $('version'), btnMin: $('btnMin'),
+      onlineCount: $('onlineCount'), recentUsers: $('recentUsers'), version: $('version'), connStatus: $('connStatus'), btnMin: $('btnMin'),
       tabs: $('tabs'), body: $('body'),
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
