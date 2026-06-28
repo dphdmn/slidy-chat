@@ -2,7 +2,7 @@
 
 A floating public chat for [play.slidysim.com](https://play.slidysim.com/) with a dark neon UI, live user status, solve-activity feed, chat groups, and an admin panel.
 
-**Server**: one Python file, zero pip dependencies. **TLS is mandatory** — handled by [Caddy](https://caddyserver.com/) (auto Let's Encrypt via sslip.io).
+**Server**: one Python file, zero pip dependencies. **TLS is mandatory** — handled by [Caddy](https://caddyserver.com/) (auto Let's Encrypt via nip.io).
 
 **Client**: one userscript file for users, one admin HTML page for admins.
 
@@ -64,8 +64,8 @@ Output:
 ========================================
   SlidySim Chat started (background)
 ========================================
-  WSS URL    : wss://203.0.113.42.sslip.io
-  Admin panel: https://203.0.113.42.sslip.io/admin
+  WSS URL    : wss://203.0.113.42.nip.io
+  Admin panel: https://203.0.113.42.nip.io/admin
   Log file   : /root/slidy-chat/chat.log
 ========================================
 
@@ -90,7 +90,7 @@ Output:
 
   Caddy  : yes (PID 12345)
   Server : yes (PID 12346)
-  URL    : wss://203.0.113.42.sslip.io
+  URL    : wss://203.0.113.42.nip.io
 
   Server started: Sun Jun 28 10:58:52 2026
 
@@ -126,7 +126,7 @@ Done.
 ```
 Browser (slidysim.com)                           Admin browser (any)
     ↓ WSS :443                                       ↓ HTTPS :443
-Caddy (auto Let's Encrypt TLS for <ip>.sslip.io)
+Caddy (auto Let's Encrypt TLS for <ip>.nip.io)
     ↓ WS (plain, localhost:8080)
 Python server
   ├── /         → regular chat (Origin locked to play.slidysim.com)
@@ -135,15 +135,15 @@ Python server
 
 **Why localhost?** The Python server binds to `127.0.0.1` only — it's never directly accessible from the internet. Caddy is the public-facing proxy on port 443. This is a security measure: even if someone bypasses Caddy, they can't reach the Python server directly. **It works online** because Caddy forwards external connections to localhost.
 
-### TLS via Caddy + sslip.io
+### TLS via Caddy + nip.io
 
 1. `start.sh` detects your VPS's public IP (via `api.ipify.org`)
-2. Generates domain: `<ip>.sslip.io` (e.g. `203.0.113.42.sslip.io`)
+2. Generates domain: `<ip>.nip.io` (e.g. `203.0.113.42.nip.io`)
 3. Writes a Caddyfile for that domain
 4. Caddy auto-provisions a Let's Encrypt certificate on first run (~10-30s)
 5. Caddy auto-renews before expiry
 
-No manual cert management. sslip.io is a free DNS service that resolves `<ip>.sslip.io` to the embedded IP.
+No manual cert management. nip.io is a free DNS service that resolves `<ip>.nip.io` to the embedded IP.
 
 ### Status detection (userscript)
 
@@ -180,7 +180,7 @@ A `scrambled` flag prevents false detections (set true on scramble, only emit on
 2. Open [userscript.user.js](https://raw.githubusercontent.com/dphdmn/slidy-chat/main/userscript.user.js) and click "Install"
 3. Edit the server URL at the top of the userscript:
    ```js
-   const SERVER_URL = 'wss://YOUR-VPS-IP.sslip.io'; // <-- CHANGE THIS
+   const SERVER_URL = 'wss://YOUR-VPS-IP.nip.io'; // <-- CHANGE THIS
    ```
 4. Visit [play.slidysim.com](https://play.slidysim.com/). A floating chat window appears.
 5. Enter the **user password** when prompted.
@@ -211,7 +211,7 @@ sudo ./start.sh --password "USER_PW" [--admin-password "ADMIN_PW"] [options]
 Options:
 - `--password PW` — user chat password (required)
 - `--admin-password PW` — admin panel password (optional, enables `/admin`)
-- `--domain DOMAIN` — override sslip.io domain
+- `--domain DOMAIN` — override nip.io domain
 - `--port N` — Caddy HTTPS port (default 443; use 8443 if not root)
 - `--ws-port N` — internal Python server port (default 8080)
 
@@ -285,4 +285,4 @@ MIT.
 ## Credits
 - CSS: [slidyhistory](https://github.com/dphdmn/slidyhistory)
 - Observer patterns: [slidywebscripts](https://github.com/dphdmn/slidywebscripts)
-- TLS: [Caddy](https://caddyserver.com/) + [Let's Encrypt](https://letsencrypt.org/) + [sslip.io](https://sslip.io/)
+- TLS: [Caddy](https://caddyserver.com/) + [Let's Encrypt](https://letsencrypt.org/) + [nip.io](https://nip.io/)

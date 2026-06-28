@@ -1,18 +1,19 @@
 # Caddyfile template for SlidySim Chat
-# start.sh replaces {{DOMAIN}} with the auto-detected sslip.io domain.
+# start.sh replaces {{DOMAIN}} and {{WS_PORT}} with actual values.
 #
 # Caddy automatically:
 #   - Provisions a Let's Encrypt TLS certificate for {{DOMAIN}}
 #   - Renews it before expiry
 #   - Redirects HTTP -> HTTPS
-#   - Proxies WSS connections to the Python server on localhost:8080
+#   - Proxies WSS connections to the Python server on localhost
+#
+# `admin off` disables Caddy's admin API on port 2019 — prevents
+# "address already in use" conflicts with system Caddy service.
+
+{
+    admin off
+}
 
 {{DOMAIN}} {
-    reverse_proxy 127.0.0.1:8080
-
-    # WebSocket support is automatic in Caddy's reverse_proxy.
-    # These headers are forwarded for defense-in-depth Origin checking.
-    header_up Host {host}
-    header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Proto {scheme}
+    reverse_proxy 127.0.0.1:{{WS_PORT}}
 }
