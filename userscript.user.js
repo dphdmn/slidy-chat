@@ -5,7 +5,8 @@
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
-// @grant        none
+// @grant        GM_log
+// @connect      slidychat.duckdns.org
 // @run-at       document-idle
 // @license      MIT
 // @icon         data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🥚</text></svg>
