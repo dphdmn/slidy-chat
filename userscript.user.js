@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.12
+// @version      0.0.13
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.12';
+  const VERSION = '0.0.13';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -441,7 +441,7 @@
     S.recentJoins = [];
     for (const u of data.users) {
       S.users.set(u.id, u);
-      if (u.id !== S.myId && S.recentJoins.length < 5) {
+      if (u.id !== S.myId && u.name !== 'Egg' && !u.isAdmin && S.recentJoins.length < 5) {
         S.recentJoins.push({ id: u.id, name: u.name, color: u.color });
       }
     }
@@ -454,7 +454,8 @@
     S.users.set(data.user.id, data.user);
     renderUsers();
     renderOnlineCount();
-    S.recentJoins = S.recentJoins.filter(j => j.id !== data.user.id);
+      S.recentJoins = S.recentJoins.filter(j => j.id !== data.user.id);
+    if (data.user.name === 'Egg' || data.user.isAdmin) return;
     S.recentJoins.unshift({ id: data.user.id, name: data.user.name, color: data.user.color });
     if (S.recentJoins.length > 10) S.recentJoins.length = 10;
     renderRecentUsers();
@@ -1195,7 +1196,7 @@
           <button class="sc-tab" data-tab="activity">Activity</button>
           <button class="sc-tab" data-tab="users">Users</button>
           <button class="sc-tab" data-tab="groups">Groups</button>
-          <button class="sc-tab" data-tab="settings">⚙</button>
+          <button class="sc-tab" data-tab="settings">SETTINGS</button>
           <button class="sc-tab" data-tab="logs">Logs</button>
         </div>
         <div class="sc-body" id="body">
