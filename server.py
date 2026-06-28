@@ -270,6 +270,8 @@ def _websocket_handshake(conn):
         log(f"  HTTP {request_line.strip()} (not WebSocket)")
         if is_admin_path:
             _serve_admin_page(conn)
+        elif path == "/bridge":
+            _serve_bridge_page(conn)
         else:
             _send_health_page(conn)
         return False, False
@@ -335,6 +337,53 @@ def _send_health_page(conn):
     if ADMIN_PASSWORD:
         body += f'<p>Admin panel: <a href="/admin"><code>/admin</code></a></p>'
     body += "</body></html>"
+    body_bytes = body.encode("utf-8")
+    resp = (
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        f"Content-Length: {len(body_bytes)}\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    )
+    try:
+        conn.sendall(resp.encode("ascii") + body_bytes)
+    except Exception:
+        pass
+
+
+def _serve_bridge_page(conn):
+    body = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>bridge</title></head>
+<body>
+<script>
+(function(){
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var url = proto + '//' + location.host + '/ws';
+  var ws = null;
+  function connect(){
+    ws = new WebSocket(url);
+    ws.onopen = function(){ parent.postMessage('__BRIDGE_OPEN__', '*'); };
+    ws.onclose = function(e){
+      parent.postMessage('__BRIDGE_CLOSE__,' + e.code + ',' + (e.reason || '') + ',' + e.wasClean, '*');
+      ws = null;
+    };
+    ws.onerror = function(){ parent.postMessage('__BRIDGE_ERROR__', '*'); };
+    ws.onmessage = function(ev){ parent.postMessage(ev.data, '*'); };
+  }
+  window.addEventListener('message', function(ev){
+    var d = ev.data;
+    if (typeof d !== 'string') return;
+    if (d === '__BRIDGE_DISCONNECT__'){
+      if (ws) { ws.onclose = null; ws.close(); ws = null; }
+      return;
+    }
+    if (ws && ws.readyState === 1) ws.send(d);
+  });
+  connect();
+})();
+</script>
+</body>
+</html>"""
     body_bytes = body.encode("utf-8")
     resp = (
         "HTTP/1.1 200 OK\r\n"

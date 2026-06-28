@@ -6,7 +6,6 @@
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
 // @grant        none
-// @connect      slidychat.duckdns.org
 // @run-at       document-idle
 // @license      MIT
 // @icon         data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🥚</text></svg>
@@ -21,6 +20,7 @@
   // ===========================================================================
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
+  const SERVER_ORIGIN = SERVER_URL.replace(/^wss?:\/\//, 'https://').replace(/\/.*$/, '');
   const VERSION = '0.0.1';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
@@ -45,7 +45,8 @@
   // STATE
   // ===========================================================================
   const S = {
-    ws: null,
+    bridgeIframe: null,
+    bridgeOpen: false,
     myId: null,
     myName: null,
     myColor: '#00f1ff',
@@ -194,66 +195,32 @@
   // WEBSOCKET CLIENT
   // ===========================================================================
   function connect() {
-    if (S.ws && (S.ws.readyState === WebSocket.OPEN || S.ws.readyState === WebSocket.CONNECTING)) return;
+    if (S.bridgeOpen) return;
     const url = S.settings_serverUrl || SERVER_URL;
     setConnState('connecting');
-    dlog('Connecting to ' + url);
-
-    dlog('navigator.onLine: ' + navigator.onLine + ' | WebSocket available: ' + (typeof WebSocket !== 'undefined'));
+    dlog('Connecting via bridge at ' + url);
 
     const httpsUrl = url.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') + '/';
     dlog('Testing HTTPS reachability: ' + httpsUrl);
     fetch(httpsUrl, { method: 'GET', mode: 'no-cors' })
-      .then(() => dlog('HTTPS fetch OK — server is reachable, TLS is valid'))
-      .catch((e) => dlog('HTTPS fetch failed: ' + e.message + ' (server may be down, TLS invalid, or network blocked)', 'error'));
+      .then(() => dlog('HTTPS fetch OK'))
+      .catch((e) => dlog('HTTPS fetch failed: ' + e.message, 'error'));
 
-    dlog('Page origin: ' + location.origin);
-
-    try {
-      S.ws = new WebSocket(url);
-    } catch (e) {
-      dlog('WebSocket constructor failed: ' + e.message, 'error');
-      setConnState('error');
-      toast('Invalid server URL: ' + url);
-      scheduleReconnect();
-      return;
+    if (S.bridgeIframe) {
+      try { S.bridgeIframe.contentWindow.postMessage('__BRIDGE_DISCONNECT__', SERVER_ORIGIN); } catch (e) {}
+      S.bridgeIframe.parentNode.removeChild(S.bridgeIframe);
+      S.bridgeIframe = null;
     }
+    S.bridgeOpen = false;
+    S.authed = false;
 
-    let connected = false;
-    const connTimer = setTimeout(() => {
-      if (!connected) dlog('WebSocket timed out (no open/error/close after 8s)', 'warn');
-    }, 8000);
-
-    S.ws.onopen = () => {
-      connected = true; clearTimeout(connTimer);
-      dlog('WebSocket connected, waiting for hello\u2026');
-      S.reconnectDelay = RECONNECT_MIN;
-      setConnState('connected');
-    };
-    S.ws.onmessage = (ev) => {
-      try { handleMessage(JSON.parse(ev.data)); }
-      catch (e) { dlog('Bad message: ' + e, 'error'); }
-    };
-    S.ws.onclose = (ev) => {
-      connected = true; clearTimeout(connTimer);
-      S.authed = false;
-      dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)') + ' wasClean=' + ev.wasClean, ev.code !== 1000 ? 'error' : 'info');
-      if (ev.code === 1006) {
-        dlog('Code 1006 = abnormal closure (no close frame received).', 'error');
-        dlog('Check the HTTPS reachability test result above in this log:', 'error');
-        dlog('  \u2022 No result yet \u2192 fetch may also be blocked (CSP / extension / proxy)', 'error');
-        dlog('  \u2022 OK \u2192 server reachable; check server logs for handshake errors', 'error');
-        dlog('  \u2022 Failed \u2192 network/TLS issue (DNS, firewall, cert, proxy)', 'error');
-        dlog('Server-side log: tail -20 ~/slidy-chat/chat.log', 'error');
-        toast('Connection rejected. Check Logs tab.');
-      }
-      setConnState('disconnected');
-      scheduleReconnect();
-    };
-    S.ws.onerror = () => {
-      dlog('WebSocket error (check: server running? TLS cert valid? URL correct?)', 'error');
-      setConnState('error');
-    };
+    const iframe = document.createElement('iframe');
+    iframe.src = SERVER_ORIGIN + '/bridge';
+    iframe.style.cssText = 'display:none!important;width:1px;height:1px;border:0;position:absolute;left:-9999px';
+    iframe.setAttribute('tabindex', '-1');
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+    S.bridgeIframe = iframe;
   }
 
   function scheduleReconnect() {
@@ -265,9 +232,19 @@
     }, S.reconnectDelay);
   }
 
+  function disconnect() {
+    S.authed = false;
+    S.bridgeOpen = false;
+    if (S.bridgeIframe) {
+      try { S.bridgeIframe.contentWindow.postMessage('__BRIDGE_DISCONNECT__', SERVER_ORIGIN); } catch (e) {}
+      S.bridgeIframe.parentNode.removeChild(S.bridgeIframe);
+      S.bridgeIframe = null;
+    }
+  }
+
   function send(obj) {
-    if (S.ws && S.ws.readyState === WebSocket.OPEN) {
-      try { S.ws.send(JSON.stringify(obj)); return true; }
+    if (S.bridgeIframe && S.bridgeIframe.contentWindow && S.bridgeOpen) {
+      try { S.bridgeIframe.contentWindow.postMessage(JSON.stringify(obj), SERVER_ORIGIN); return true; }
       catch (e) { console.warn('[slidy-chat] send failed', e); }
     }
     return false;
@@ -302,6 +279,54 @@
     if (S.ui.chat) {
       S.ui.chat.classList.toggle('sc-disabled', !enabled);
     }
+  }
+
+  // ===========================================================================
+  // BRIDGE – iframe relay (bypasses CSP by loading from server's own origin)
+  // ===========================================================================
+
+  function setupBridgeListener() {
+    window.addEventListener('message', function (ev) {
+      if (ev.origin !== SERVER_ORIGIN) return;
+      const data = ev.data;
+      if (typeof data !== 'string') return;
+
+      if (data === '__BRIDGE_OPEN__') {
+        S.bridgeOpen = true;
+        dlog('Bridge connected, waiting for hello\u2026');
+        S.reconnectDelay = RECONNECT_MIN;
+        setConnState('connected');
+        return;
+      }
+      if (data.startsWith('__BRIDGE_CLOSE__,')) {
+        S.authed = false;
+        S.bridgeOpen = false;
+        const parts = data.split(',');
+        const code = parseInt(parts[1]) || 0;
+        const reason = parts[2] || '';
+        const wasClean = parts[3] === 'true';
+        dlog('Bridge closed: code=' + code + ' reason=' + (reason || '(empty)') + ' wasClean=' + wasClean, code !== 1000 ? 'error' : 'info');
+        if (code === 1006) {
+          dlog('Code 1006 = abnormal closure (no close frame received).', 'error');
+          dlog('Check the HTTPS reachability test result above in this log:', 'error');
+          dlog('  \u2022 No result yet \u2192 fetch may also be blocked', 'error');
+          dlog('  \u2022 OK \u2192 server reachable; check server logs for handshake errors', 'error');
+          dlog('  \u2022 Failed \u2192 network/TLS issue (DNS, firewall, cert, proxy)', 'error');
+          toast('Connection rejected. Check Logs tab.');
+        }
+        setConnState('disconnected');
+        scheduleReconnect();
+        return;
+      }
+      if (data === '__BRIDGE_ERROR__') {
+        S.bridgeOpen = false;
+        dlog('Bridge WebSocket error', 'error');
+        setConnState('error');
+        return;
+      }
+      try { handleMessage(JSON.parse(data)); }
+      catch (e) { dlog('Bad message: ' + e, 'error'); }
+    });
   }
 
   // ===========================================================================
@@ -341,7 +366,7 @@
       dlog('No password set, prompting user…', 'warn');
       toast('No password set. Open settings (⚙) to enter one.');
       setConnState('error');
-      if (S.ws) S.ws.close();
+      disconnect();
       return;
     }
     S.myName = getUsername();
@@ -365,7 +390,7 @@
     setConnState('error');
     toast('Auth failed: ' + (data.reason || 'invalid password'));
     setPassword(null);
-    if (S.ws) S.ws.close();
+    disconnect();
     setTimeout(() => {
       const pw = prompt('SlidySim Chat\n\n' + (data.reason || 'Auth failed') + '\n\nEnter the chat password:');
       if (pw) { setPassword(pw); connect(); }
@@ -1820,12 +1845,12 @@
           control: createButton('Change', () => {
             const pw = prompt('Enter new chat password:');
             if (pw) { setPassword(pw); toast('Password updated. Reconnecting…');
-              if (S.ws) try { S.ws.close(); } catch(e) {} connect(); }
+              disconnect(); connect(); }
           })},
         { label: 'Reconnect', desc: 'State: ' + S.connState,
           control: createButton('Reconnect', () => {
             if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
-            if (S.ws) try { S.ws.close(); } catch(e) {}
+            disconnect();
             S.reconnectDelay = RECONNECT_MIN; connect();
           })},
       ]},
@@ -2038,6 +2063,7 @@
     loadSettings();
     buildUI();
     setConnState('disconnected');
+    setupBridgeListener();
     connect();
     startObservers();
     // Heartbeat
@@ -2046,9 +2072,7 @@
     setInterval(() => {
       if (S.typingUsers.size > 0) renderTyping();
     }, 2000);
-    window.addEventListener('beforeunload', () => {
-      if (S.ws) try { S.ws.close(); } catch (e) {}
-    });
+    window.addEventListener('beforeunload', disconnect);
     dlog('Initialized v' + VERSION + ', server: ' + (S.settings_serverUrl || SERVER_URL));
   }
 
