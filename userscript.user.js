@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.2
+// @version      0.0.4
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.2';
+  const VERSION = '0.0.4';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -139,7 +139,6 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const s = raw ? JSON.parse(raw) : {};
-      if (isValidHexColor(s.color)) S.myColor = s.color;
       if (typeof s.shareStatus === 'boolean') S.shareStatus = s.shareStatus;
       if (typeof s.shareActivity === 'boolean') S.shareActivity = s.shareActivity;
       if (typeof s.chatPos === 'object' && s.chatPos) S.chatPos = s.chatPos;
@@ -155,7 +154,6 @@
   function saveSettings() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        color: S.myColor,
         shareStatus: S.shareStatus,
         shareActivity: S.shareActivity,
         chatPos: S.chatPos,
@@ -545,6 +543,7 @@
   function onGroupInvite(data) {
     S.pendingInvites.push(data);
     renderGroups();
+    if (S.tab !== 'groups') { S.unreadPerTab.groups++; renderTabBadges(); }
     toast(data.inviterName + ' invited you to "' + data.name + '"');
   }
 
@@ -970,7 +969,7 @@
   .sc-act-list { flex: 1; overflow-y: auto; padding: 6px 8px; }
   .sc-act-list::-webkit-scrollbar { width: 6px; }
   .sc-act-list::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
-  .sc-act-item { padding: 5px 8px; margin-bottom: 4px; border: 1px solid #2a2a2a; border-radius: 4px;
+  .sc-act-item { padding: 5px 8px; margin-bottom: 4px; border: 1px solid #2a2a2a; border-left: 3px solid #2a2a2a; border-radius: 4px;
     font-size: 11px; background: #181818; animation: sc-fadein .12s; }
   .sc-act-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .sc-act-user { font-weight: 700; text-shadow: 0 0 5px currentColor; }
@@ -1374,7 +1373,7 @@
       let count = 0;
       if (tab === 'chat') count = S.unreadPerTab.chat + (S.chatTarget ? S.unreadPerTab.groups : 0);
       else if (tab === 'activity') count = S.unreadPerTab.activity;
-      else if (tab === 'groups' && !S.chatTarget) count = S.unreadPerTab.groups;
+      else if (tab === 'groups') count = S.unreadPerTab.groups;
       let badge = t.querySelector('.sc-tab-badge');
       if (count > 0) {
         if (!badge) { badge = document.createElement('span'); badge.className = 'sc-tab-badge'; t.appendChild(badge); }
@@ -1622,16 +1621,13 @@
   function createActivityEl(ev) {
     const el = document.createElement('div');
     el.className = 'sc-act-item';
+    el.style.borderLeftColor = ev.color || '#555';
     const row = document.createElement('div');
     row.className = 'sc-act-row';
-    const userEl = document.createElement('span');
-    userEl.className = 'sc-act-user';
-    userEl.style.color = ev.color || '#00f1ff';
-    userEl.textContent = (ev.name || 'unknown') + ':';
     const timeEl = document.createElement('span');
     timeEl.className = 'sc-act-time-val';
     timeEl.textContent = ev.time || '';
-    row.appendChild(userEl); row.appendChild(timeEl);
+    row.appendChild(timeEl);
     if (ev.solveNumber != null) {
       const numEl = document.createElement('span');
       numEl.className = 'sc-act-meta';
@@ -1655,6 +1651,7 @@
     el.appendChild(row);
     const metaEl = document.createElement('div');
     metaEl.className = 'sc-act-meta';
+    metaEl.style.color = '#777';
     const metaParts = [];
     if (ev.session) metaParts.push('in session ' + ev.session);
     if (ev.moves) metaParts.push(ev.moves + ' moves');
@@ -1848,7 +1845,7 @@
     const openBtn = document.createElement('button');
     openBtn.className = 'sc-group-btn'; openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => {
-      S.chatTarget = g.id; updateChatTargetSelector(); switchTab('chat');
+      S.chatTarget = g.id; updateChatTargetSelector(); renderGroups(); switchTab('chat');
     });
     const leaveBtn = document.createElement('button');
     leaveBtn.className = 'sc-group-btn danger'; leaveBtn.textContent = 'Leave';
@@ -1898,11 +1895,6 @@
     S.ui.settings.innerHTML = '';
 
     const sections = [
-      { title: 'Profile', rows: [
-        { label: 'Username color', desc: 'Pick a color for your name in chat.',
-          control: createColorControl() },
-        { label: 'Your name', desc: 'Read from the page automatically.', control: null },
-      ]},
       { title: 'Privacy', rows: [
         { label: 'Share my status', desc: 'Shows others what you\'re doing (solving / browsing stats / etc.)',
           control: createToggle('shareStatus', S.shareStatus, (v) => {
@@ -1946,7 +1938,7 @@
       ]},
       { title: 'About', rows: [
         { label: 'SlidySim Chat v' + VERSION,
-          desc: 'Egg-themed emoji panel. Color picker above for your name.',
+          desc: 'Random bright color per session. Egg-themed emoji panel.',
           control: null },
       ]},
     ];
@@ -1984,22 +1976,6 @@
       onChange(v);
     });
     return t;
-  }
-
-  function createColorControl() {
-    const row = document.createElement('div');
-    row.className = 'sc-color-row';
-    const preview = document.createElement('span');
-    preview.className = 'sc-color-preview'; preview.style.color = S.myColor; preview.textContent = 'Aa';
-    const input = document.createElement('input');
-    input.type = 'color'; input.className = 'sc-color-input'; input.value = S.myColor;
-    input.addEventListener('input', () => {
-      S.myColor = input.value; preview.style.color = S.myColor;
-      if (S.authed) send({ type: 'recolor', color: S.myColor });
-      saveSettings(); renderChatMessages(); renderUsers();
-    });
-    row.appendChild(preview); row.appendChild(input);
-    return row;
   }
 
   function createTextInput(value, onChange) {
