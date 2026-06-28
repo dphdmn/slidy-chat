@@ -58,6 +58,7 @@
     reconnectDelay: RECONNECT_MIN,
     reconnectTimer: null,
     users: new Map(),
+    recentJoins: [],
     messages: [],
     activity: [],
     groups: new Map(),
@@ -437,15 +438,26 @@
 
   function onPresence(data) {
     S.users.clear();
-    for (const u of data.users) S.users.set(u.id, u);
+    S.recentJoins = [];
+    for (const u of data.users) {
+      S.users.set(u.id, u);
+      if (u.id !== S.myId && S.recentJoins.length < 5) {
+        S.recentJoins.push({ id: u.id, name: u.name, color: u.color });
+      }
+    }
     renderUsers();
     renderOnlineCount();
+    renderRecentUsers();
   }
 
   function onUserJoin(data) {
     S.users.set(data.user.id, data.user);
     renderUsers();
     renderOnlineCount();
+    S.recentJoins = S.recentJoins.filter(j => j.id !== data.user.id);
+    S.recentJoins.unshift({ id: data.user.id, name: data.user.name, color: data.user.color });
+    if (S.recentJoins.length > 10) S.recentJoins.length = 10;
+    renderRecentUsers();
     if (data.user.id !== S.myId) addSystemMessage(data.user.name + ' joined');
   }
 
@@ -464,6 +476,8 @@
   function onUserRenamed(data) {
     const u = S.users.get(data.userId);
     if (u) { u.name = data.name; renderUsers(); }
+    const rj = S.recentJoins.find(j => j.id === data.userId);
+    if (rj) { rj.name = data.name; renderRecentUsers(); }
     if (data.userId === S.myId) S.myName = data.name;
     renderChatMessages();
   }
@@ -471,6 +485,8 @@
   function onUserRecolored(data) {
     const u = S.users.get(data.userId);
     if (u) { u.color = data.color; renderUsers(); }
+    const rj = S.recentJoins.find(j => j.id === data.userId);
+    if (rj) { rj.color = data.color; renderRecentUsers(); }
     if (data.userId === S.myId) S.myColor = data.color;
     renderChatMessages();
   }
@@ -894,6 +910,9 @@
   .sc-status-dot.error { background: #ff2262; box-shadow: 0 0 6px #ff2262; }
   .sc-online-count { font-size: 10px; color: #00f1ff; background: rgba(0,188,212,0.08);
     border: 1px solid rgba(0,188,212,0.2); padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+  .sc-recent-users { display: inline-flex; align-items: center; gap: 2px; overflow: hidden; white-space: nowrap; flex-shrink: 1; min-width: 0; max-width: 35%; font-size: 10px; color: #777; }
+  .sc-recent-user { font-weight: 600; margin: 0 1px; }
+  .sc-recent-more { font-weight: 400; color: #555; margin-left: 2px; }
   .sc-header-spacer { flex: 1; }
   .sc-header-btn { background: transparent; border: 1px solid #2a2a2a; color: #888;
     width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
@@ -1164,6 +1183,7 @@
           <span class="sc-status-dot" id="statusDot"></span>
           <span class="sc-title" id="title">SlidySim Chat</span>
           <span class="sc-online-count" id="onlineCount">0</span>
+          <span class="sc-recent-users" id="recentUsers"></span>
           <span class="sc-header-spacer"></span>
           <button class="sc-header-btn" id="btnMin" title="Minimize">—</button>
         </div>
@@ -1216,7 +1236,7 @@
     S.ui = {
       host, shadow, root,
       chat: $('chat'), header: $('header'), title: $('title'), statusDot: $('statusDot'),
-      onlineCount: $('onlineCount'), btnMin: $('btnMin'),
+      onlineCount: $('onlineCount'), recentUsers: $('recentUsers'), btnMin: $('btnMin'),
       tabs: $('tabs'), body: $('body'),
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
@@ -1422,6 +1442,30 @@
 
   function renderOnlineCount() {
     if (S.ui.onlineCount) S.ui.onlineCount.textContent = S.users.size;
+  }
+
+  function renderRecentUsers() {
+    const el = S.ui.recentUsers;
+    if (!el) return;
+    const MAX_VISIBLE = 3;
+    const items = S.recentJoins || [];
+    el.innerHTML = '';
+    if (items.length === 0) return;
+    const visible = items.slice(0, MAX_VISIBLE);
+    const extra = items.length - MAX_VISIBLE;
+    for (const u of visible) {
+      const span = document.createElement('span');
+      span.className = 'sc-recent-user';
+      span.style.color = u.color || '#00f1ff';
+      span.textContent = u.name;
+      el.appendChild(span);
+    }
+    if (extra > 0) {
+      const more = document.createElement('span');
+      more.className = 'sc-recent-more';
+      more.textContent = 'and ' + extra + ' more';
+      el.appendChild(more);
+    }
   }
 
   // ===========================================================================
