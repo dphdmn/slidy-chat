@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.23
+// @version      0.0.24
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -963,7 +963,7 @@
   .sc-msg-time { font-size: 9px; color: #555; }
   .sc-msg-text { color: #e8e8e8; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
   .sc-msg.action .sc-msg-text { color: #888; font-style: italic; }
-  .sc-mention { color: #00f1ff; font-weight: 600; }
+  .sc-mention { font-weight: 600; }
   .sc-msg-admin-tag { font-size: 8px; font-weight: 700; color: #ff2262;
     background: rgba(255,34,98,0.1); border: 1px solid rgba(255,34,98,0.3);
     padding: 0 4px; border-radius: 2px; text-transform: uppercase; letter-spacing: .5px; }
@@ -1717,10 +1717,14 @@
         a.textContent = match[1];
         frag.appendChild(a);
       } else {
+        const mentionName = match[2].slice(1);
+        const mentionedUser = Array.from(S.users.values()).find(u => u.name === mentionName);
         const span = document.createElement('span');
         span.className = 'sc-mention';
         span.textContent = match[2];
+        span.style.color = (mentionedUser && mentionedUser.color) || '#00f1ff';
         span.style.cursor = 'pointer';
+        span.style.fontWeight = '600';
         span.addEventListener('click', () => {
           S.ui.input.focus();
           const val = S.ui.input.value;
