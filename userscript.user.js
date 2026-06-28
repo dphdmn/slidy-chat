@@ -1624,10 +1624,14 @@
     el.style.borderLeftColor = ev.color || '#555';
     const row = document.createElement('div');
     row.className = 'sc-act-row';
+    const userEl = document.createElement('span');
+    userEl.className = 'sc-act-user';
+    userEl.style.color = ev.color || '#00f1ff';
+    userEl.textContent = (ev.name || 'unknown') + ': ';
     const timeEl = document.createElement('span');
     timeEl.className = 'sc-act-time-val';
     timeEl.textContent = ev.time || '';
-    row.appendChild(timeEl);
+    row.appendChild(userEl); row.appendChild(timeEl);
     if (ev.moves || ev.tps) {
       const statsEl = document.createElement('span');
       statsEl.className = 'sc-act-meta';
