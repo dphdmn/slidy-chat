@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.16
+// @version      0.0.17
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
