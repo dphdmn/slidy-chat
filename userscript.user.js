@@ -988,7 +988,7 @@
   .sc-act-meta { color: #888; font-size: 10px; }
   .sc-act-dnf { color: #ff2262; font-weight: 700; }
   .sc-act-when { color: #555; font-size: 9px; margin-left: auto; }
-  .sc-act-hide { background: none; border: none; color: #333; cursor: pointer; font-size: 11px; padding: 0 2px; font-family: inherit; line-height: 1; border-radius: 2px; }
+  .sc-act-hide { background: none; border: none; color: #555; cursor: pointer; font-size: 11px; padding: 0 2px; font-family: inherit; line-height: 1; border-radius: 2px; }
   .sc-act-hide:hover { color: #ff2262; background: rgba(255,34,98,0.1); }
   .sc-act-hidden { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0; width: 100%; }
   .sc-act-hidden-label { font-size: 10px; color: #555; }
