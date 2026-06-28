@@ -1720,6 +1720,15 @@
     const statusLabel = ({ puzzle: 'solving', stats: 'stats', sessions: 'browsing',
       menu: 'menu', hidden: 'private', idle: 'idle', connecting: 'connecting',
       admin: 'admin' })[status] || status;
+    let displayDetail = detail;
+    if (!u.isAdmin && u.sharingStatus !== false) {
+      const prefixes = ['Solving: ', 'Stats: '];
+      for (const p of prefixes) {
+        if (displayDetail.startsWith(p)) { displayDetail = displayDetail.slice(p.length); break; }
+      }
+      const redundant = ['Solving', 'Browsing stats', 'Main menu', 'Browsing sessions'];
+      if (redundant.includes(displayDetail)) displayDetail = '';
+    }
     const nameEl = document.createElement('span');
     nameEl.className = 'sc-user-name';
     nameEl.style.color = u.color || '#00f1ff';
@@ -1729,7 +1738,7 @@
     badgeEl.textContent = statusLabel;
     const statusEl = document.createElement('span');
     statusEl.className = 'sc-user-status';
-    statusEl.textContent = detail;
+    statusEl.textContent = displayDetail;
     el.appendChild(nameEl); el.appendChild(badgeEl); el.appendChild(statusEl);
     if (!isMe && !u.isAdmin) {
       const btn = document.createElement('button');
