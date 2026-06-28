@@ -20,7 +20,7 @@
   // ===========================================================================
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
-  const SERVER_ORIGIN = SERVER_URL.replace(/^wss?:\/\//, 'https://').replace(/\/.*$/, '');
+  const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
   const VERSION = '0.0.1';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
