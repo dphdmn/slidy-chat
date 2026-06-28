@@ -2,7 +2,7 @@
 // @name         SlidySim Chat
 // @namespace    dphdmn
 // @version      0.0.15
-// @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
+// @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
 // @grant        none
