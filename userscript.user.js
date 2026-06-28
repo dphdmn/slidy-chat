@@ -292,12 +292,6 @@
       state === 'connecting' ? 'connecting' :
       state === 'error' ? 'error' : ''
     );
-    if (S.ui.title) {
-      S.ui.title.textContent = state === 'authed' ? 'SlidySim Chat' :
-        state === 'connected' ? 'SlidySim Chat · auth…' :
-        state === 'connecting' ? 'SlidySim Chat · connecting…' :
-        state === 'error' ? 'SlidySim Chat · error' : 'SlidySim Chat · offline';
-    }
     // Disable input/send when not authed
     const enabled = state === 'authed';
     if (S.ui.input) S.ui.input.disabled = !enabled;
@@ -905,15 +899,15 @@
     backdrop-filter: blur(12px); border-bottom: 1px solid #2a2a2a;
     cursor: move; user-select: none; flex-shrink: 0;
   }
-  .sc-title { font-size: 13px; font-weight: 700; letter-spacing: .5px;
-    text-shadow: 0 0 8px rgba(255,255,255,0.15); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-version { font-size: 9px; font-weight: 500; color: #555; letter-spacing: .3px;
+    white-space: nowrap; flex-shrink: 0; }
   .sc-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; transition: all .2s; flex-shrink: 0; }
   .sc-status-dot.connected { background: #00f1ff; box-shadow: 0 0 6px #00f1ff, 0 0 12px rgba(0,188,212,0.4); }
   .sc-status-dot.connecting { background: #ffff00; box-shadow: 0 0 6px #ffff00; animation: sc-pulse 1s infinite; }
   .sc-status-dot.error { background: #ff2262; box-shadow: 0 0 6px #ff2262; }
   .sc-online-count { font-size: 10px; color: #00f1ff; background: rgba(0,188,212,0.08);
     border: 1px solid rgba(0,188,212,0.2); padding: 1px 6px; border-radius: 3px; font-weight: 600; }
-  .sc-recent-users { display: inline-flex; align-items: center; gap: 2px; overflow: hidden; white-space: nowrap; flex-shrink: 1; min-width: 0; max-width: 35%; font-size: 10px; color: #777; }
+  .sc-recent-users { display: inline-flex; align-items: center; gap: 2px; overflow: hidden; white-space: nowrap; flex-shrink: 1; min-width: 0; max-width: 55%; font-size: 10px; color: #777; }
   .sc-recent-user { font-weight: 600; margin: 0 1px; }
   .sc-recent-more { font-weight: 400; color: #555; margin-left: 2px; }
   .sc-header-spacer { flex: 1; }
@@ -1189,7 +1183,7 @@
       <div class="sc-chat" id="chat">
         <div class="sc-header" id="header">
           <span class="sc-status-dot" id="statusDot"></span>
-          <span class="sc-title" id="title">SlidySim Chat</span>
+          <span class="sc-version" id="version"></span>
           <span class="sc-online-count" id="onlineCount">0</span>
           <span class="sc-recent-users" id="recentUsers"></span>
           <span class="sc-header-spacer"></span>
@@ -1243,8 +1237,8 @@
     const $ = (id) => shadow.getElementById(id);
     S.ui = {
       host, shadow, root,
-      chat: $('chat'), header: $('header'), title: $('title'), statusDot: $('statusDot'),
-      onlineCount: $('onlineCount'), recentUsers: $('recentUsers'), btnMin: $('btnMin'),
+      chat: $('chat'), header: $('header'), statusDot: $('statusDot'),
+      onlineCount: $('onlineCount'), recentUsers: $('recentUsers'), version: $('version'), btnMin: $('btnMin'),
       tabs: $('tabs'), body: $('body'),
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
@@ -1255,6 +1249,7 @@
       logsList: $('logsList'), logsCount: $('logsCount'), clearLogsBtn: $('clearLogsBtn'),
     };
 
+    if (S.ui.version) S.ui.version.textContent = 'v' + VERSION;
     applyPosition(S.ui.chat, S.chatPos, '0px', '0px');
     if (S.minimized) toggleMinimize(true);
     wireEvents();
