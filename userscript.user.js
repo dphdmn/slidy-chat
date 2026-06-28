@@ -5,7 +5,7 @@
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
-// @grant        GM_log
+// @grant        none
 // @connect      slidychat.duckdns.org
 // @run-at       document-idle
 // @license      MIT
@@ -20,7 +20,7 @@
   // CONFIG — change SERVER_URL to your VPS's sslip.io domain (printed by server)
   // ===========================================================================
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
-    || 'wss://slidychat.duckdns.org'; // <-- CHANGE THIS to your server's WSS URL
+    || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const VERSION = '0.0.1';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
@@ -199,15 +199,15 @@
     setConnState('connecting');
     dlog('Connecting to ' + url);
 
-    // Diagnostic: try a simple HTTPS fetch first to check if server is reachable
-    // and TLS is valid. This helps distinguish TLS/network issues from Origin issues.
+    dlog('navigator.onLine: ' + navigator.onLine + ' | WebSocket available: ' + (typeof WebSocket !== 'undefined'));
+
     const httpsUrl = url.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') + '/';
     dlog('Testing HTTPS reachability: ' + httpsUrl);
     fetch(httpsUrl, { method: 'GET', mode: 'no-cors' })
       .then(() => dlog('HTTPS fetch OK — server is reachable, TLS is valid'))
       .catch((e) => dlog('HTTPS fetch failed: ' + e.message + ' (server may be down, TLS invalid, or network blocked)', 'error'));
 
-    dlog('Page origin: ' + location.origin + ' (server expects: https://play.slidysim.com)');
+    dlog('Page origin: ' + location.origin);
 
     try {
       S.ws = new WebSocket(url);
@@ -218,8 +218,15 @@
       scheduleReconnect();
       return;
     }
+
+    let connected = false;
+    const connTimer = setTimeout(() => {
+      if (!connected) dlog('WebSocket timed out (no open/error/close after 8s)', 'warn');
+    }, 8000);
+
     S.ws.onopen = () => {
-      dlog('WebSocket connected, waiting for hello…');
+      connected = true; clearTimeout(connTimer);
+      dlog('WebSocket connected, waiting for hello\u2026');
       S.reconnectDelay = RECONNECT_MIN;
       setConnState('connected');
     };
@@ -228,14 +235,15 @@
       catch (e) { dlog('Bad message: ' + e, 'error'); }
     };
     S.ws.onclose = (ev) => {
+      connected = true; clearTimeout(connTimer);
       S.authed = false;
-      dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)'), ev.code !== 1000 ? 'error' : 'info');
+      dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)') + ' wasClean=' + ev.wasClean, ev.code !== 1000 ? 'error' : 'info');
       if (ev.code === 1006) {
-        dlog('Code 1006 = WebSocket upgrade failed (server rejected connection).', 'error');
-        dlog('This server does NOT enforce Origin checks (password is the security boundary).', 'error');
-        dlog('Check the HTTPS reachability test above:', 'error');
+        dlog('Code 1006 = abnormal closure (no close frame received).', 'error');
+        dlog('Check the HTTPS reachability test result above in this log:', 'error');
+        dlog('  \u2022 No result yet \u2192 fetch may also be blocked (CSP / extension / proxy)', 'error');
         dlog('  \u2022 OK \u2192 server reachable; check server logs for handshake errors', 'error');
-        dlog('  \u2022 Failed \u2192 network/TLS issue (DNS, firewall, cert)', 'error');
+        dlog('  \u2022 Failed \u2192 network/TLS issue (DNS, firewall, cert, proxy)', 'error');
         dlog('Server-side log: tail -20 ~/slidy-chat/chat.log', 'error');
         toast('Connection rejected. Check Logs tab.');
       }
