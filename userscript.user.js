@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.4
+// @version      0.0.5
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.4';
+  const VERSION = '0.0.5';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -50,7 +50,7 @@
     myId: null,
     myName: null,
     myColor: (() => {
-      const colors = ['#00f1ff','#ff6b9d','#ffd93d','#6bcb77','#a855f7','#fb923c','#60a5fa','#f472b6','#34d399','#fbbf24','#818cf8','#e879f9'];
+      const colors = ['#ff00ff','#ff66ff','#8000ff','#a14dff','#0080ff','#47a1fb','#70b9ff','#00d269','#79e389','#ffd700','#ffe85f','#ff2262','#ec44ca','#b9f2ff','#2fcfc2','#85fa85','#ffaaf4','#ffff00'];
       return colors[Math.floor(Math.random() * colors.length)];
     })(),
     authed: false,
@@ -1628,15 +1628,11 @@
     timeEl.className = 'sc-act-time-val';
     timeEl.textContent = ev.time || '';
     row.appendChild(timeEl);
-    if (ev.solveNumber != null) {
-      const numEl = document.createElement('span');
-      numEl.className = 'sc-act-meta';
-      if (ev.sessionMean) {
-        numEl.textContent = '(' + ev.solveNumber + ' / ' + ev.sessionMean + ')';
-      } else {
-        numEl.textContent = '#' + ev.solveNumber;
-      }
-      row.appendChild(numEl);
+    if (ev.moves || ev.tps) {
+      const statsEl = document.createElement('span');
+      statsEl.className = 'sc-act-meta';
+      statsEl.textContent = '(' + (ev.moves || '0') + ' / ' + (ev.tps || '0') + ')';
+      row.appendChild(statsEl);
     }
     if (ev.isDNF) {
       const dnfEl = document.createElement('span');
@@ -1652,11 +1648,7 @@
     const metaEl = document.createElement('div');
     metaEl.className = 'sc-act-meta';
     metaEl.style.color = '#777';
-    const metaParts = [];
-    if (ev.session) metaParts.push('in session ' + ev.session);
-    if (ev.moves) metaParts.push(ev.moves + ' moves');
-    if (ev.tps) metaParts.push(ev.tps + ' tps');
-    metaEl.textContent = metaParts.join(' · ');
+    if (ev.session) metaEl.textContent = 'in session ' + ev.session;
     el.appendChild(metaEl);
     return el;
   }
