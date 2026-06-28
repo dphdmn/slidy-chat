@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.8
+// @version      0.0.9
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.8';
+  const VERSION = '0.0.9';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -72,7 +72,7 @@
     renderedCount: INITIAL_RENDER,
     lastTypingSent: 0,
     typingUsers: new Map(),
-    activityFilter: { user: 'all', hideDNF: false },
+    activityFilter: { user: 'all', hideDNF: false, hidden: new Set() },
     scrambled: false,
     lastSolveSignature: null,    // prevent duplicate solve events on session switch
     lastStatus: null,
@@ -513,8 +513,18 @@
   function onActivity(data) {
     S.activity.push(data);
     if (S.activity.length > 1000) S.activity.shift();
-    if (S.tab !== 'activity') { S.unreadPerTab.activity++; renderTabBadges(); }
-    renderActivity(true);
+    if (S.tab !== 'activity') { S.unreadPerTab.activity++; renderTabBadges(); return; }
+    const visible = S.activityFilter.user === 'all' && !S.activityFilter.hidden.has(data.name);
+    if (visible) {
+      S.ui.actList.prepend(createActivityEl(data));
+      const empty = S.ui.actList.querySelector('.sc-empty');
+      if (empty) empty.remove();
+      while (S.ui.actList.children.length > 300) S.ui.actList.lastChild.remove();
+    } else {
+      renderActivity(true);
+    }
+    updateUserFilter();
+    renderHiddenUsers();
   }
 
   function onActivityHistory(data) {
@@ -978,6 +988,12 @@
   .sc-act-meta { color: #888; font-size: 10px; }
   .sc-act-dnf { color: #ff2262; font-weight: 700; }
   .sc-act-when { color: #555; font-size: 9px; margin-left: auto; }
+  .sc-act-hide { background: none; border: none; color: #333; cursor: pointer; font-size: 11px; padding: 0 2px; font-family: inherit; line-height: 1; border-radius: 2px; }
+  .sc-act-hide:hover { color: #ff2262; background: rgba(255,34,98,0.1); }
+  .sc-act-hidden { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0; width: 100%; }
+  .sc-act-hidden-label { font-size: 10px; color: #555; }
+  .sc-act-hidden-tag { font-size: 10px; color: #888; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 1px 6px; border-radius: 3px; cursor: pointer; }
+  .sc-act-hidden-tag:hover { color: #00f1ff; border-color: #00bcd4; }
   .sc-empty { color: #555; text-align: center; padding: 30px 10px; font-size: 12px; font-style: italic; }
 
   /* Users */
@@ -1175,6 +1191,7 @@
           <div class="sc-panel" data-panel="activity">
             <div class="sc-act-filters">
               <select id="actUserFilter"><option value="all">All users</option></select>
+              <div class="sc-act-hidden" id="actHidden"></div>
             </div>
             <div class="sc-act-list" id="actList"></div>
           </div>
@@ -1204,7 +1221,7 @@
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
       input: $('input'), send: $('send'), newMsgs: $('newMsgs'),
-      actUserFilter: $('actUserFilter'), actList: $('actList'),
+      actUserFilter: $('actUserFilter'), actList: $('actList'), actHidden: $('actHidden'),
       usersList: $('usersList'), groupsList: $('groupsList'), settings: $('settings'),
       mini: $('mini'), miniBadge: $('miniBadge'), toast: $('toast'),
       logsList: $('logsList'), logsCount: $('logsCount'), clearLogsBtn: $('clearLogsBtn'),
@@ -1611,6 +1628,7 @@
       events = events.filter(e => e.name === S.activityFilter.user);
     }
     if (S.activityFilter.hideDNF) events = events.filter(e => !e.isDNF);
+    if (S.activityFilter.hidden.size > 0) events = events.filter(e => !S.activityFilter.hidden.has(e.name));
     if (events.length === 0) {
       S.ui.actList.innerHTML = '';
       const empty = document.createElement('div');
@@ -1618,6 +1636,7 @@
       empty.textContent = 'No activity yet. Solve a puzzle to share!';
       S.ui.actList.appendChild(empty);
       updateUserFilter();
+      renderHiddenUsers();
       return;
     }
     events = events.slice(0, 300);
@@ -1626,6 +1645,7 @@
     S.ui.actList.innerHTML = '';
     S.ui.actList.appendChild(frag);
     updateUserFilter();
+    renderHiddenUsers();
   }
 
   function createActivityEl(ev) {
@@ -1654,6 +1674,12 @@
       dnfEl.textContent = 'DNF';
       row.appendChild(dnfEl);
     }
+    const hideBtn = document.createElement('button');
+    hideBtn.className = 'sc-act-hide';
+    hideBtn.textContent = '\u2715';
+    hideBtn.title = 'Hide ' + (ev.name || 'user');
+    hideBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleHideUser(ev.name); });
+    row.appendChild(hideBtn);
     const whenEl = document.createElement('span');
     whenEl.className = 'sc-act-when';
     whenEl.textContent = formatTime(ev.timestamp);
@@ -1686,6 +1712,33 @@
       S.ui.actUserFilter.appendChild(opt);
     }
     S.ui.actUserFilter.value = current;
+  }
+
+  function toggleHideUser(name) {
+    if (S.activityFilter.hidden.has(name)) {
+      S.activityFilter.hidden.delete(name);
+    } else {
+      S.activityFilter.hidden.add(name);
+    }
+    renderActivity();
+    renderHiddenUsers();
+  }
+
+  function renderHiddenUsers() {
+    if (!S.ui.actHidden) return;
+    S.ui.actHidden.innerHTML = '';
+    if (S.activityFilter.hidden.size === 0) return;
+    const label = document.createElement('span');
+    label.className = 'sc-act-hidden-label';
+    label.textContent = 'Hidden:';
+    S.ui.actHidden.appendChild(label);
+    for (const name of S.activityFilter.hidden) {
+      const tag = document.createElement('span');
+      tag.className = 'sc-act-hidden-tag';
+      tag.textContent = name + ' \u2715';
+      tag.addEventListener('click', () => toggleHideUser(name));
+      S.ui.actHidden.appendChild(tag);
+    }
   }
 
   // ===========================================================================
