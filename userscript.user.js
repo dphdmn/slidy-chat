@@ -1608,7 +1608,7 @@
     if (!S.ui.actList) return;
     let events = S.activity.slice().reverse();
     if (S.activityFilter.user !== 'all') {
-      events = events.filter(e => e.userId === S.activityFilter.user);
+      events = events.filter(e => e.name === S.activityFilter.user);
     }
     if (S.activityFilter.hideDNF) events = events.filter(e => !e.isDNF);
     if (events.length === 0) {
@@ -1670,18 +1670,19 @@
   function updateUserFilter() {
     if (!S.ui.actUserFilter) return;
     const current = S.activityFilter.user;
-    const users = new Map();
+    const seen = new Set();
+    const names = [];
     for (const ev of S.activity) {
-      if (!users.has(ev.userId)) users.set(ev.userId, { id: ev.userId, name: ev.name, color: ev.color });
+      if (!seen.has(ev.name)) { seen.add(ev.name); names.push({ name: ev.name, color: ev.color }); }
     }
     S.ui.actUserFilter.innerHTML = '';
     const allOpt = document.createElement('option');
     allOpt.value = 'all'; allOpt.textContent = 'All users';
     S.ui.actUserFilter.appendChild(allOpt);
-    for (const u of users.values()) {
+    for (const u of names) {
       const opt = document.createElement('option');
-      opt.value = u.id; opt.textContent = u.name;
-      if (u.id === current) opt.selected = true;
+      opt.value = u.name; opt.textContent = u.name;
+      if (u.name === current) opt.selected = true;
       S.ui.actUserFilter.appendChild(opt);
     }
     S.ui.actUserFilter.value = current;
