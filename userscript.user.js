@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.9
+// @version      0.0.10
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.9';
+  const VERSION = '0.0.10';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -988,7 +988,7 @@
   .sc-act-meta { color: #888; font-size: 10px; }
   .sc-act-dnf { color: #ff2262; font-weight: 700; }
   .sc-act-when { color: #555; font-size: 9px; margin-left: auto; }
-  .sc-act-hide { background: none; border: none; color: #555; cursor: pointer; font-size: 11px; padding: 0 2px; font-family: inherit; line-height: 1; border-radius: 2px; }
+  .sc-act-hide { background: rgba(255,255,255,0.15); border: none; color: #999; cursor: pointer; font-size: 11px; padding: 0 4px; font-family: inherit; line-height: 1; border-radius: 3px; }
   .sc-act-hide:hover { color: #ff2262; background: rgba(255,34,98,0.1); }
   .sc-act-hidden { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0; width: 100%; }
   .sc-act-hidden-label { font-size: 10px; color: #555; }
