@@ -192,6 +192,17 @@
     const url = S.settings_serverUrl || SERVER_URL;
     setConnState('connecting');
     dlog('Connecting to ' + url);
+
+    // Diagnostic: try a simple HTTPS fetch first to check if server is reachable
+    // and TLS is valid. This helps distinguish TLS/network issues from Origin issues.
+    const httpsUrl = url.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') + '/';
+    dlog('Testing HTTPS reachability: ' + httpsUrl);
+    fetch(httpsUrl, { method: 'GET', mode: 'no-cors' })
+      .then(() => dlog('HTTPS fetch OK — server is reachable, TLS is valid'))
+      .catch((e) => dlog('HTTPS fetch failed: ' + e.message + ' (server may be down, TLS invalid, or network blocked)', 'error'));
+
+    dlog('Page origin: ' + location.origin + ' (server expects: https://play.slidysim.com)');
+
     try {
       S.ws = new WebSocket(url);
     } catch (e) {
@@ -214,8 +225,11 @@
       S.authed = false;
       dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)'), ev.code !== 1000 ? 'error' : 'info');
       if (ev.code === 1006) {
-        dlog('Code 1006 = abnormal closure. Common causes: bad TLS cert, wrong Origin, server down, network blocked.', 'error');
-        toast('Connection failed. Check Logs tab.');
+        dlog('Code 1006 = WebSocket upgrade failed (server rejected connection).', 'error');
+        dlog('Most likely cause: Origin check failed. The server only accepts connections from https://play.slidysim.com', 'error');
+        dlog('Check server log on VPS: tail -20 ~/slidy-chat/chat.log | grep -i reject', 'error');
+        dlog('If the HTTPS fetch above succeeded, the issue is the Origin check, not TLS.', 'error');
+        toast('Connection rejected by server. Check Logs tab.');
       }
       setConnState('disconnected');
       scheduleReconnect();

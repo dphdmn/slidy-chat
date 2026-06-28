@@ -5,8 +5,8 @@ SlidySim Chat Server
 Pure-stdlib Python WebSocket chat server.
 
   - Runs plain WS on localhost (127.0.0.1). Caddy fronts it with WSS+TLS.
-  - Origin-locked to https://play.slidysim.com for regular user connections.
-  - Admin panel served at /admin (separate admin password, no Origin lock).
+  - Password-protected (no Origin lock — password is the security boundary).
+  - Admin panel served at /admin (separate admin password).
   - Password authentication (user + admin passwords set separately).
   - Public chat + chat groups + activity feed + presence.
   - Admin can delete messages and send messages with admin badge.
@@ -36,7 +36,7 @@ from collections import deque
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-ORIGIN = "https://play.slidysim.com"
+ORIGIN = "https://play.slidysim.com"  # Expected origin (display only, not enforced)
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
 
@@ -277,23 +277,10 @@ def _websocket_handshake(conn):
         conn.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         return False, False
 
-    # Origin check: ENFORCE for regular users, SKIP for admin path
-    # (admin path is protected by admin password instead)
-    if not is_admin_path:
-        origin = headers.get("origin", "")
-        if origin != ORIGIN:
-            log(f"Rejected connection: origin={origin!r} (expected {ORIGIN!r})")
-            body = json.dumps({"type": "error", "code": "origin_rejected",
-                               "message": "Origin not allowed."}).encode()
-            resp = (
-                "HTTP/1.1 403 Forbidden\r\n"
-                "Content-Type: application/json\r\n"
-                f"Content-Length: {len(body)}\r\n"
-                "Connection: close\r\n"
-                "\r\n"
-            )
-            conn.sendall(resp.encode() + body)
-            return False, False
+    # No Origin check — password authentication is the security boundary.
+    # The admin path is additionally protected by a separate admin password.
+    # (Origin checks are unreliable for WebSocket from userscripts — some
+    # browsers/managers don't send the header, causing silent failures.)
 
     accept = base64.b64encode(
         hashlib.sha1((key + WS_GUID).encode("ascii")).digest()
@@ -330,7 +317,7 @@ def _send_health_page(conn):
         "a{color:#00bcd4;}"
         "</style></head><body>"
         f"<h1>{SERVER_NAME}</h1>"
-        f"<p>Origin lock: <code>{ORIGIN}</code></p>"
+        f"<p>Security: password-protected (no Origin lock)</p>"
         "<table>"
         f"<tr><td>Version</td><td>{SERVER_VERSION}</td></tr>"
         f"<tr><td>Uptime</td><td>{h:02d}:{m:02d}:{s:02d}</td></tr>"
@@ -340,7 +327,7 @@ def _send_health_page(conn):
         f"<tr><td>Active groups</td><td>{n_groups}</td></tr>"
         f"<tr><td>Admin panel</td><td>{admin_status}</td></tr>"
         "</table>"
-        f'<p style="color:#555;margin-top:30px">Connect via WSS from <code>{ORIGIN}</code>.</p>'
+        f'<p style="color:#555;margin-top:30px">Connect via WSS — any origin accepted (password required).</p>'
     )
     if ADMIN_PASSWORD:
         body += f'<p>Admin panel: <a href="/admin"><code>/admin</code></a></p>'
@@ -861,7 +848,7 @@ def _start_server():
     log(f"  {SERVER_NAME} v{SERVER_VERSION}")
     log("=" * 60)
     log(f"  Bind        : {HOST}:{PORT}")
-    log(f"  Origin lock : {ORIGIN}")
+    log(f"  Origin      : any (password-protected)")
     log(f"  Admin panel : {'enabled at /admin' if ADMIN_PASSWORD else 'disabled'}")
     log(f"  Max clients : {MAX_CLIENTS}")
     log(f"  Max msgs    : {MAX_MESSAGES}")
@@ -926,8 +913,8 @@ def main():
         epilog=(
             "This server runs plain WebSocket on localhost. Use start.sh to\n"
             "automatically start Caddy (auto Let's Encrypt TLS) in front of it.\n\n"
-            "Origin is locked to https://play.slidysim.com for regular users.\n"
-            "Admin panel at /admin uses the admin password instead.\n\n"
+            "Origin: any (password-protected, no Origin lock).\n"
+            "Admin panel at /admin uses a separate admin password.\n\n"
             "Example:\n"
             "  python3 server.py --password 's3cret' --admin-password 'adm1n'\n"
         ),
