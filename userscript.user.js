@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.29
+// @version      0.0.30
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -608,6 +608,7 @@
       members: data.members, messages: data.messages || [],
     });
     renderGroups();
+    updateChatTargetSelector();
     if (S.chatTarget === data.groupId) renderChatMessages();
   }
 
@@ -616,6 +617,7 @@
     if (g) {
       if (!g.members.find(m => m.id === data.user.id)) g.members.push(data.user);
       renderGroups();
+      updateChatTargetSelector();
       if (S.chatTarget === data.groupId) addSystemMessage(data.user.name + ' joined the group', data.groupId);
     }
   }
@@ -1308,6 +1310,7 @@
     wireEvents();
     renderSettings();
     renderEmojiPanel();
+    updateChatTargetSelector();
   }
 
   // ===========================================================================
