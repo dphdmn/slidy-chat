@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.13
+// @version      0.0.14
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.13';
+  const VERSION = '0.0.14';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -893,7 +893,7 @@
   }
   .sc-chat {
     pointer-events: auto; position: absolute;
-    width: 380px; height: 520px; min-height: 200px;
+    width: 336px; height: 520px; min-height: 200px;
     background: #161616; border: 1px solid #3a3a3a; border-radius: 6px;
     box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,188,212,0.08);
     display: flex; flex-direction: column; overflow: hidden;
@@ -1251,7 +1251,7 @@
       logsList: $('logsList'), logsCount: $('logsCount'), clearLogsBtn: $('clearLogsBtn'),
     };
 
-    applyPosition(S.ui.chat, S.chatPos, '16px', '16px');
+    applyPosition(S.ui.chat, S.chatPos, '0px', '0px');
     if (S.minimized) toggleMinimize(true);
     wireEvents();
     renderSettings();
@@ -1388,7 +1388,7 @@
     } else {
       S.ui.chat.style.display = 'flex';
       S.ui.mini.style.display = 'none';
-      applyPosition(S.ui.chat, S.chatPos, '16px', '16px');
+      applyPosition(S.ui.chat, S.chatPos, '0px', '0px');
       S.unreadPerTab.chat = 0;
       renderTabBadges();
       renderMiniBadge();
@@ -2047,7 +2047,7 @@
             S.chatPos = { x: null, y: null };
             S.miniPos = { x: null, y: null };
             S.ui.chat.style.left = 'auto'; S.ui.chat.style.top = 'auto';
-            S.ui.chat.style.right = '16px'; S.ui.chat.style.bottom = '16px';
+            S.ui.chat.style.right = '0px'; S.ui.chat.style.bottom = '0px';
             S.ui.mini.style.left = 'auto'; S.ui.mini.style.top = 'auto';
             S.ui.mini.style.right = '16px'; S.ui.mini.style.bottom = '16px';
             saveSettings();
