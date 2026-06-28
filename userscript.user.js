@@ -1162,9 +1162,13 @@
   .sc-input::-webkit-scrollbar-thumb:hover { background: #555; }
 
   /* Global scrollbar styling for all scrollable areas */
-  .sc-msgs, .sc-act-list, .sc-users-list, .sc-groups-list, .sc-settings {
+  .sc-msgs, .sc-act-list, .sc-users-list, .sc-groups-list, .sc-settings, .sc-logs-list, .sc-emoji-panel {
     scrollbar-width: thin; scrollbar-color: #3a3a3a transparent;
   }
+  .sc-emoji-panel::-webkit-scrollbar { width: 5px; }
+  .sc-emoji-panel::-webkit-scrollbar-track { background: transparent; }
+  .sc-emoji-panel::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+  .sc-emoji-panel::-webkit-scrollbar-thumb:hover { background: #555; }
   `;
 
   // ===========================================================================
