@@ -215,7 +215,7 @@
     S.authed = false;
 
     const iframe = document.createElement('iframe');
-    iframe.src = SERVER_ORIGIN + '/bridge';
+    iframe.src = SERVER_ORIGIN + '/';
     iframe.style.cssText = 'display:none!important;width:1px;height:1px;border:0;position:absolute;left:-9999px';
     iframe.setAttribute('tabindex', '-1');
     iframe.setAttribute('aria-hidden', 'true');
