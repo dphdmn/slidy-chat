@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.27
+// @version      0.0.28
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -49,10 +49,8 @@
     bridgeOpen: false,
     myId: null,
     myName: null,
-    myColor: (() => {
-      const colors = ['#ff00ff','#ff66ff','#8000ff','#a14dff','#0080ff','#47a1fb','#70b9ff','#00d269','#79e389','#ffd700','#ffe85f','#ff2262','#ec44ca','#b9f2ff','#2fcfc2','#85fa85','#ffaaf4','#ffff00'];
-      return colors[Math.floor(Math.random() * colors.length)];
-    })(),
+    myColor: null,
+    COLOR_PALETTE: ['#ff00ff','#ff66ff','#8000ff','#a14dff','#0080ff','#47a1fb','#70b9ff','#00d269','#79e389','#ffd700','#ffe85f','#ff2262','#ec44ca','#b9f2ff','#2fcfc2','#85fa85','#ffaaf4','#ffff00'],
     authed: false,
     connState: 'disconnected',
     reconnectDelay: RECONNECT_MIN,
@@ -397,6 +395,13 @@
     }
   }
 
+  function pickMyColor() {
+    const taken = new Set(Array.from(S.users.values()).map(u => u.color).filter(Boolean));
+    const avail = S.COLOR_PALETTE.filter(c => !taken.has(c));
+    const pool = avail.length > 0 ? avail : S.COLOR_PALETTE;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
   async function onHello() {
     dlog('Received hello from server, sending auth\u2026');
     const pw = getPassword();
@@ -408,6 +413,7 @@
       return;
     }
     S.myName = await getUsername();
+    S.myColor = S.COLOR_PALETTE[Math.floor(Math.random() * S.COLOR_PALETTE.length)];
     dlog('Authenticating as: ' + S.myName);
     send({
       type: 'auth', password: pw, name: S.myName, color: S.myColor,
@@ -444,6 +450,12 @@
         S.recentJoins.push({ id: u.id, name: u.name, color: u.color });
       }
     }
+    const better = pickMyColor();
+    if (better !== S.myColor) {
+      S.myColor = better;
+      send({ type: 'recolor', color: better });
+      renderChatMessages();
+    }
     renderUsers();
     renderOnlineCount();
     renderRecentUsers();
@@ -451,6 +463,11 @@
 
   function onUserJoin(data) {
     S.users.set(data.user.id, data.user);
+    if (data.user.color === S.myColor && data.user.id !== S.myId) {
+      S.myColor = pickMyColor();
+      send({ type: 'recolor', color: S.myColor });
+      renderChatMessages();
+    }
     renderUsers();
     renderOnlineCount();
       S.recentJoins = S.recentJoins.filter(j => j.id !== data.user.id);
@@ -490,6 +507,10 @@
     const rj = S.recentJoins.find(j => j.id === data.userId);
     if (rj) { rj.color = data.color; renderRecentUsers(); }
     if (data.userId === S.myId) S.myColor = data.color;
+    else if (data.color === S.myColor && S.myColor) {
+      S.myColor = pickMyColor();
+      send({ type: 'recolor', color: S.myColor });
+    }
     renderChatMessages();
   }
 
