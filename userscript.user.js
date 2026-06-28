@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         SlidySim Chat
-// @namespace    slidy-chat
-// @version      3.0.0
+// @namespace    dphdmn
+// @version      0.0.1
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
+// @author       dphdmn
 // @match        https://play.slidysim.com/*
 // @grant        none
 // @run-at       document-idle
 // @license      MIT
+// @icon         data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🥚</text></svg>
 // ==/UserScript==
 
 /* eslint-disable no-console */
@@ -17,10 +19,10 @@
   // CONFIG — change SERVER_URL to your VPS's sslip.io domain (printed by server)
   // ===========================================================================
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
-    || 'wss://YOUR-VPS-IP.sslip.io'; // <-- CHANGE THIS (server prints it on startup)
-  const VERSION = '3.0.0';
-  const STORAGE_KEY = 'slidysim_chat_settings_v2';
-  const PASSWORD_KEY = 'slidysim_chat_password_v2';
+    || 'wss://slidychat.duckdns.org'; // <-- CHANGE THIS to your server's WSS URL
+  const VERSION = '0.0.1';
+  const STORAGE_KEY = 'slidysim_chat_settings_v3';
+  const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
   const INITIAL_RENDER = 80;
   const LOAD_MORE = 40;
@@ -73,9 +75,20 @@
     ui: {},
     observer: null,
     settings_serverUrl: null,
-    unreadPerTab: { chat: 0, activity: 0, groups: 0 },
+    unreadPerTab: { chat: 0, activity: 0, groups: 0, logs: 0 },
     newMsgsBadge: 0,
+    debugLog: [],
   };
+
+  function dlog(msg, level) {
+    level = level || 'info';
+    const entry = { ts: new Date().toISOString(), level: level, msg: String(msg) };
+    S.debugLog.push(entry);
+    if (S.debugLog.length > 200) S.debugLog.shift();
+    if (level === 'error') console.error('[slidy-chat]', msg);
+    else console.log('[slidy-chat]', msg);
+    if (S.tab === 'logs') renderLogs();
+  }
 
   // ===========================================================================
   // UTILITIES
@@ -176,30 +189,41 @@
   // ===========================================================================
   function connect() {
     if (S.ws && (S.ws.readyState === WebSocket.OPEN || S.ws.readyState === WebSocket.CONNECTING)) return;
-    setConnState('connecting');
     const url = S.settings_serverUrl || SERVER_URL;
+    setConnState('connecting');
+    dlog('Connecting to ' + url);
     try {
       S.ws = new WebSocket(url);
     } catch (e) {
+      dlog('WebSocket constructor failed: ' + e.message, 'error');
       setConnState('error');
       toast('Invalid server URL: ' + url);
       scheduleReconnect();
       return;
     }
     S.ws.onopen = () => {
+      dlog('WebSocket connected, waiting for hello…');
       S.reconnectDelay = RECONNECT_MIN;
       setConnState('connected');
     };
     S.ws.onmessage = (ev) => {
       try { handleMessage(JSON.parse(ev.data)); }
-      catch (e) { console.warn('[slidy-chat] bad message', e); }
+      catch (e) { dlog('Bad message: ' + e, 'error'); }
     };
-    S.ws.onclose = () => {
+    S.ws.onclose = (ev) => {
       S.authed = false;
+      dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)'), ev.code !== 1000 ? 'error' : 'info');
+      if (ev.code === 1006) {
+        dlog('Code 1006 = abnormal closure. Common causes: bad TLS cert, wrong Origin, server down, network blocked.', 'error');
+        toast('Connection failed. Check Logs tab.');
+      }
       setConnState('disconnected');
       scheduleReconnect();
     };
-    S.ws.onerror = () => { setConnState('error'); };
+    S.ws.onerror = () => {
+      dlog('WebSocket error (check: server running? TLS cert valid? URL correct?)', 'error');
+      setConnState('error');
+    };
   }
 
   function scheduleReconnect() {
@@ -234,6 +258,20 @@
         state === 'connecting' ? 'SlidySim Chat · connecting…' :
         state === 'error' ? 'SlidySim Chat · error' : 'SlidySim Chat · offline';
     }
+    // Disable input/send when not authed
+    const enabled = state === 'authed';
+    if (S.ui.input) S.ui.input.disabled = !enabled;
+    if (S.ui.send) S.ui.send.disabled = !enabled;
+    if (S.ui.emojiBtn) S.ui.emojiBtn.disabled = !enabled;
+    if (S.ui.input) {
+      S.ui.input.placeholder = enabled
+        ? 'Type a message… (Enter=send, Shift+Enter=newline)'
+        : 'Connecting…';
+    }
+    // Add/remove disabled class on chat body
+    if (S.ui.chat) {
+      S.ui.chat.classList.toggle('sc-disabled', !enabled);
+    }
   }
 
   // ===========================================================================
@@ -267,14 +305,17 @@
   }
 
   function onHello() {
+    dlog('Received hello from server, sending auth…');
     const pw = getPassword();
     if (!pw) {
+      dlog('No password set, prompting user…', 'warn');
       toast('No password set. Open settings (⚙) to enter one.');
       setConnState('error');
       if (S.ws) S.ws.close();
       return;
     }
     S.myName = getUsername();
+    dlog('Authenticating as: ' + S.myName);
     send({
       type: 'auth', password: pw, name: S.myName, color: S.myColor,
       features: { shareStatus: S.shareStatus, shareActivity: S.shareActivity },
@@ -282,6 +323,7 @@
   }
 
   function onAuthOk(data) {
+    dlog('Auth OK! userId=' + data.userId);
     S.myId = data.userId;
     S.authed = true;
     setConnState('authed');
@@ -925,6 +967,46 @@
 
   @keyframes sc-fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes sc-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+  /* Disabled state */
+  .sc-chat.sc-disabled .sc-input-wrap { opacity: 0.5; pointer-events: none; }
+  .sc-chat.sc-disabled .sc-msgs::after {
+    content: 'Not connected. Waiting for server…'; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); color: #555; font-size: 11px; text-align: center;
+    pointer-events: none; width: 90%;
+  }
+
+  /* Logs panel */
+  .sc-logs-toolbar { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    border-bottom: 1px solid #2a2a2a; background: #161616; flex-shrink: 0; }
+  .sc-logs-count { font-size: 10px; color: #555; }
+  .sc-logs-list { flex: 1; overflow-y: auto; padding: 4px 0; font-size: 10px; }
+  .sc-logs-list::-webkit-scrollbar { width: 6px; }
+  .sc-logs-list::-webkit-scrollbar-track { background: transparent; }
+  .sc-logs-list::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+  .sc-log-entry { display: flex; gap: 6px; padding: 2px 8px; border-bottom: 1px solid #1a1a1a;
+    align-items: flex-start; line-height: 1.4; }
+  .sc-log-entry:hover { background: rgba(255,255,255,0.02); }
+  .sc-log-time { color: #555; flex-shrink: 0; }
+  .sc-log-level { font-weight: 700; flex-shrink: 0; min-width: 38px; }
+  .sc-log-info .sc-log-level { color: #00bcd4; }
+  .sc-log-error .sc-log-level { color: #ff2262; }
+  .sc-log-warn .sc-log-level { color: #ffff00; }
+  .sc-log-msg { color: #e8e8e8; word-break: break-word; white-space: pre-wrap; }
+  .sc-log-error .sc-log-msg { color: #ff9999; }
+
+  /* Input fix: no scrollbar overflow, better min-height */
+  .sc-input { min-height: 36px !important; line-height: 1.5 !important;
+    scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+  .sc-input::-webkit-scrollbar { width: 5px; }
+  .sc-input::-webkit-scrollbar-track { background: transparent; }
+  .sc-input::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+  .sc-input::-webkit-scrollbar-thumb:hover { background: #555; }
+
+  /* Global scrollbar styling for all scrollable areas */
+  .sc-msgs, .sc-act-list, .sc-users-list, .sc-groups-list, .sc-settings {
+    scrollbar-width: thin; scrollbar-color: #3a3a3a transparent;
+  }
   `;
 
   // ===========================================================================
@@ -949,7 +1031,6 @@
           <span class="sc-online-count" id="onlineCount">0</span>
           <span class="sc-header-spacer"></span>
           <button class="sc-header-btn" id="btnMin" title="Minimize">—</button>
-          <button class="sc-header-btn close" id="btnClose" title="Hide">×</button>
         </div>
         <div class="sc-tabs" id="tabs">
           <button class="sc-tab active" data-tab="chat">Chat</button>
@@ -957,6 +1038,7 @@
           <button class="sc-tab" data-tab="users">Users</button>
           <button class="sc-tab" data-tab="groups">Groups</button>
           <button class="sc-tab" data-tab="settings">⚙</button>
+          <button class="sc-tab" data-tab="logs">Logs</button>
         </div>
         <div class="sc-body" id="body">
           <div class="sc-panel active" data-panel="chat">
@@ -974,13 +1056,19 @@
           <div class="sc-panel" data-panel="activity">
             <div class="sc-act-filters">
               <select id="actUserFilter"><option value="all">All users</option></select>
-              <label><input type="checkbox" id="actHideDNF"> Hide DNFs</label>
             </div>
             <div class="sc-act-list" id="actList"></div>
           </div>
           <div class="sc-panel" data-panel="users"><div class="sc-users-list" id="usersList"></div></div>
           <div class="sc-panel" data-panel="groups"><div class="sc-groups-list" id="groupsList"></div></div>
           <div class="sc-panel" data-panel="settings"><div class="sc-settings" id="settings"></div></div>
+          <div class="sc-panel" data-panel="logs">
+            <div class="sc-logs-toolbar">
+              <button class="sc-btn" id="clearLogsBtn">Clear</button>
+              <span class="sc-logs-count" id="logsCount">0 entries</span>
+            </div>
+            <div class="sc-logs-list" id="logsList"></div>
+          </div>
         </div>
       </div>
       <div class="sc-mini" id="mini" style="display:none">🥚<span class="sc-mini-badge" id="miniBadge" style="display:none">0</span></div>
@@ -992,17 +1080,18 @@
     S.ui = {
       host, shadow, root,
       chat: $('chat'), header: $('header'), title: $('title'), statusDot: $('statusDot'),
-      onlineCount: $('onlineCount'), btnMin: $('btnMin'), btnClose: $('btnClose'),
+      onlineCount: $('onlineCount'), btnMin: $('btnMin'),
       tabs: $('tabs'), body: $('body'),
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
       input: $('input'), send: $('send'), newMsgs: $('newMsgs'),
-      actUserFilter: $('actUserFilter'), actHideDNF: $('actHideDNF'), actList: $('actList'),
+      actUserFilter: $('actUserFilter'), actList: $('actList'),
       usersList: $('usersList'), groupsList: $('groupsList'), settings: $('settings'),
       mini: $('mini'), miniBadge: $('miniBadge'), toast: $('toast'),
+      logsList: $('logsList'), logsCount: $('logsCount'), clearLogsBtn: $('clearLogsBtn'),
     };
 
-    applyPosition();
+    applyPosition(S.ui.chat, '16px', '16px');
     if (S.minimized) toggleMinimize(true);
     wireEvents();
     renderSettings();
@@ -1018,12 +1107,6 @@
       if (t) switchTab(t.dataset.tab);
     });
     S.ui.btnMin.addEventListener('click', () => toggleMinimize());
-    S.ui.btnClose.addEventListener('click', () => {
-      S.ui.chat.style.display = 'none';
-      S.ui.mini.style.display = 'flex';
-      S.minimized = true;
-      saveSettings();
-    });
     S.ui.mini.addEventListener('click', () => toggleMinimize());
     makeDraggable();
     S.ui.chatTarget.addEventListener('change', () => {
@@ -1043,8 +1126,9 @@
     S.ui.actUserFilter.addEventListener('change', () => {
       S.activityFilter.user = S.ui.actUserFilter.value; renderActivity();
     });
-    S.ui.actHideDNF.addEventListener('change', () => {
-      S.activityFilter.hideDNF = S.ui.actHideDNF.checked; renderActivity();
+    // Clear logs
+    S.ui.clearLogsBtn.addEventListener('click', () => {
+      S.debugLog = []; renderLogs();
     });
     // Prevent slidysim key handlers from firing while typing (bubble phase only)
     S.ui.input.addEventListener('keydown', (e) => e.stopPropagation(), false);
@@ -1053,8 +1137,8 @@
 
   function autoGrowInput() {
     const el = S.ui.input;
-    el.style.height = '30px';
-    el.style.height = Math.min(80, el.scrollHeight) + 'px';
+    el.style.height = '36px';
+    el.style.height = Math.min(100, el.scrollHeight) + 'px';
   }
 
   function submitInput() {
@@ -1070,39 +1154,45 @@
   // DRAGGING
   // ===========================================================================
   function makeDraggable() {
-    let dragging = false, offX = 0, offY = 0;
-    S.ui.header.addEventListener('mousedown', (e) => {
+    let dragging = false, offX = 0, offY = 0, dragTarget = null;
+
+    function startDrag(el, e) {
       if (e.target.closest('button')) return;
       dragging = true;
-      const rect = S.ui.chat.getBoundingClientRect();
+      dragTarget = el;
+      const rect = el.getBoundingClientRect();
       offX = e.clientX - rect.left;
       offY = e.clientY - rect.top;
       e.preventDefault();
-    });
+    }
+
+    S.ui.header.addEventListener('mousedown', (e) => startDrag(S.ui.chat, e));
+    S.ui.mini.addEventListener('mousedown', (e) => startDrag(S.ui.mini, e));
+
     document.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      let x = clamp(e.clientX - offX, -S.ui.chat.offsetWidth + 80, window.innerWidth - 80);
-      let y = clamp(e.clientY - offY, 0, window.innerHeight - 40);
+      if (!dragging || !dragTarget) return;
+      let x = clamp(e.clientX - offX, 0, window.innerWidth - dragTarget.offsetWidth);
+      let y = clamp(e.clientY - offY, 0, window.innerHeight - dragTarget.offsetHeight);
       S.pos.x = x; S.pos.y = y;
-      S.ui.chat.style.left = x + 'px';
-      S.ui.chat.style.top = y + 'px';
-      S.ui.chat.style.right = 'auto';
-      S.ui.chat.style.bottom = 'auto';
+      dragTarget.style.left = x + 'px';
+      dragTarget.style.top = y + 'px';
+      dragTarget.style.right = 'auto';
+      dragTarget.style.bottom = 'auto';
     });
     document.addEventListener('mouseup', () => {
-      if (dragging) { dragging = false; saveSettings(); }
+      if (dragging) { dragging = false; dragTarget = null; saveSettings(); }
     });
   }
 
-  function applyPosition() {
+  function applyPosition(el, defaultRight, defaultBottom) {
     if (S.pos.x != null && S.pos.y != null) {
-      S.ui.chat.style.left = S.pos.x + 'px';
-      S.ui.chat.style.top = S.pos.y + 'px';
-      S.ui.chat.style.right = 'auto';
-      S.ui.chat.style.bottom = 'auto';
+      el.style.left = S.pos.x + 'px';
+      el.style.top = S.pos.y + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
     } else {
-      S.ui.chat.style.right = '16px';
-      S.ui.chat.style.bottom = '16px';
+      el.style.right = defaultRight;
+      el.style.bottom = defaultBottom;
     }
   }
 
@@ -1112,16 +1202,11 @@
     if (toMini) {
       S.ui.chat.style.display = 'none';
       S.ui.mini.style.display = 'flex';
-      if (S.pos.x != null) {
-        S.ui.mini.style.left = S.pos.x + 'px';
-        S.ui.mini.style.top = S.pos.y + 'px';
-      } else {
-        S.ui.mini.style.right = '16px';
-        S.ui.mini.style.bottom = '16px';
-      }
+      applyPosition(S.ui.mini, '16px', '16px');
     } else {
       S.ui.chat.style.display = 'flex';
       S.ui.mini.style.display = 'none';
+      applyPosition(S.ui.chat, '16px', '16px');
       S.unreadPerTab.chat = 0;
       renderTabBadges();
       renderMiniBadge();
@@ -1138,15 +1223,17 @@
       t.classList.toggle('active', t.dataset.tab === tab));
     S.ui.body.querySelectorAll('.sc-panel').forEach(p =>
       p.classList.toggle('active', p.dataset.panel === tab));
-    if (tab === 'chat') { S.unreadPerTab.chat = 0; S.ui.input.focus(); }
+    if (tab === 'chat') { S.unreadPerTab.chat = 0; if (S.authed) S.ui.input.focus(); }
     if (tab === 'activity') S.unreadPerTab.activity = 0;
     if (tab === 'groups') S.unreadPerTab.groups = 0;
+    if (tab === 'logs') S.unreadPerTab.logs = 0;
     renderTabBadges();
     saveSettings();
     if (tab === 'users') renderUsers();
     if (tab === 'groups') renderGroups();
     if (tab === 'activity') renderActivity();
     if (tab === 'settings') renderSettings();
+    if (tab === 'logs') renderLogs();
   }
 
   function renderTabBadges() {
@@ -1640,6 +1727,12 @@
     const myGroups = Array.from(S.groups.values()).filter(g =>
       g.members.find(m => m.id === S.myId));
     S.ui.chatTarget.innerHTML = '';
+    // Only show the selector if there are groups
+    if (myGroups.length === 0) {
+      S.ui.chatTarget.parentElement.style.display = 'none';
+      return;
+    }
+    S.ui.chatTarget.parentElement.style.display = 'flex';
     const mainOpt = document.createElement('option');
     mainOpt.value = 'main'; mainOpt.textContent = 'Main Chat';
     if (S.chatTarget === null) mainOpt.selected = true;
@@ -1781,6 +1874,36 @@
   // ===========================================================================
   // EMOJI PANEL (egg + silly whitelist only)
   // ===========================================================================
+  // ===========================================================================
+  // LOGS RENDERING
+  // ===========================================================================
+  function renderLogs() {
+    if (!S.ui.logsList) return;
+    S.ui.logsList.innerHTML = '';
+    S.ui.logsCount.textContent = S.debugLog.length + ' entries';
+    const frag = document.createDocumentFragment();
+    for (const entry of S.debugLog) {
+      const el = document.createElement('div');
+      el.className = 'sc-log-entry sc-log-' + entry.level;
+      const time = document.createElement('span');
+      time.className = 'sc-log-time';
+      const d = new Date(entry.ts);
+      time.textContent = String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0') + ':' +
+        String(d.getSeconds()).padStart(2, '0');
+      const levelEl = document.createElement('span');
+      levelEl.className = 'sc-log-level';
+      levelEl.textContent = entry.level.toUpperCase();
+      const msgEl = document.createElement('span');
+      msgEl.className = 'sc-log-msg';
+      msgEl.textContent = entry.msg;
+      el.appendChild(time); el.appendChild(levelEl); el.appendChild(msgEl);
+      frag.appendChild(el);
+    }
+    S.ui.logsList.appendChild(frag);
+    S.ui.logsList.scrollTop = S.ui.logsList.scrollHeight;
+  }
+
   function renderEmojiPanel() {
     S.ui.emojiPanel.innerHTML = '';
     for (const emoji of ALLOWED_EMOJIS) {
@@ -1881,7 +2004,7 @@
     window.addEventListener('beforeunload', () => {
       if (S.ws) try { S.ws.close(); } catch (e) {}
     });
-    console.log('[slidy-chat] initialized v' + VERSION);
+    dlog('Initialized v' + VERSION + ', server: ' + (S.settings_serverUrl || SERVER_URL));
   }
 
   if (document.body) init();

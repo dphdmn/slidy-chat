@@ -255,6 +255,12 @@ function connect() {
   S.myName = name;
   S.ui.loginErr.textContent = '';
 
+  // Persist credentials in localStorage
+  try {
+    localStorage.setItem('slidy_chat_admin_name', name);
+    localStorage.setItem('slidy_chat_admin_pw', pw);
+  } catch (e) {}
+
   const wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/admin';
   setDot('connecting');
   try {
@@ -276,19 +282,20 @@ function connect() {
   };
   S.ws.onclose = () => {
     if (S.authed) {
-      // Was connected, show login again
       S.authed = false;
       S.ui.app.classList.remove('show');
       S.ui.login.style.display = 'block';
-      S.ui.loginErr.textContent = 'Connection lost. Reconnect.';
+      S.ui.loginErr.textContent = 'Connection lost. Reconnecting…';
       setDot('offline');
+      // Auto-reconnect after 3s
+      setTimeout(() => { if (!S.authed) connect(); }, 3000);
     } else {
-      S.ui.loginErr.textContent = 'Connection closed.';
+      S.ui.loginErr.textContent = 'Connection closed. Check server.';
       setDot('offline');
     }
   };
   S.ws.onerror = () => {
-    S.ui.loginErr.textContent = 'WebSocket error.';
+    S.ui.loginErr.textContent = 'WebSocket error. Server may be down.';
     setDot('offline');
   };
 }
@@ -574,6 +581,14 @@ function submitInput() {
   if (!text.trim()) return;
   S.ui.input.value = '';
   S.ui.input.style.height = '32px';
+  // Add own message locally (server doesn't echo to sender)
+  const msg = {
+    type: 'chat', id: 'local-' + Date.now(), userId: S.myId, name: S.myName,
+    color: '#ff2262', text: text, timestamp: Date.now() / 1000,
+    groupId: null, isAdmin: true,
+  };
+  S.messages.push(msg);
+  appendMessageEl(msg);
   send({ type: 'chat', text: text, groupId: null });
 }
 
@@ -582,6 +597,18 @@ initRefs();
 wireEvents();
 setInterval(renderTyping, 2000);
 setInterval(() => { if (S.authed) send({ type: 'ping' }); }, 30000);
+
+// Auto-fill saved credentials
+try {
+  const savedName = localStorage.getItem('slidy_chat_admin_name');
+  const savedPw = localStorage.getItem('slidy_chat_admin_pw');
+  if (savedName) S.ui.adminName.value = savedName;
+  if (savedPw) {
+    S.ui.adminPw.value = savedPw;
+    // Auto-connect if credentials are saved
+    setTimeout(() => connect(), 200);
+  }
+} catch (e) {}
 </script>
 </body>
 </html>
