@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.30
+// @version      0.1.0
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -936,7 +936,7 @@
     backdrop-filter: blur(12px); border-bottom: 1px solid #2a2a2a;
     cursor: move; user-select: none; flex-shrink: 0;
   }
-  .sc-version { font-size: 9px; font-weight: 500; color: #555; letter-spacing: .3px;
+  .sc-version { font-size: 9px; font-weight: 500; color: #e8e8e8; letter-spacing: .3px;
     white-space: nowrap; flex-shrink: 0; }
   .sc-conn-status { font-size: 9px; font-weight: 500; color: #888; white-space: nowrap; flex-shrink: 0; }
   .sc-conn-status.error { color: #ff2262; }
