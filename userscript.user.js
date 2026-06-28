@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.14
+// @version      0.0.15
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.14';
+  const VERSION = '0.0.15';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -1292,6 +1292,26 @@
     // Prevent slidysim key handlers from firing while typing (bubble phase only)
     S.ui.input.addEventListener('keydown', (e) => e.stopPropagation(), false);
     S.ui.input.addEventListener('keyup', (e) => e.stopPropagation(), false);
+
+    window.addEventListener('resize', onResize);
+  }
+
+  function clampPos(el, pos) {
+    if (pos.x == null || pos.y == null || el.style.display === 'none') return;
+    const w = el.offsetWidth || parseInt(el.style.width) || 336;
+    const h = el.offsetHeight || 520;
+    const x = clamp(pos.x, 0, window.innerWidth - w);
+    const y = clamp(pos.y, 0, window.innerHeight - h);
+    if (x !== pos.x || y !== pos.y) {
+      pos.x = x; pos.y = y;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      el.style.right = 'auto'; el.style.bottom = 'auto';
+    }
+  }
+
+  function onResize() {
+    clampPos(S.ui.chat, S.chatPos);
+    clampPos(S.ui.mini, S.miniPos);
   }
 
   function autoGrowInput() {
@@ -1384,10 +1404,12 @@
     if (toMini) {
       S.ui.chat.style.display = 'none';
       S.ui.mini.style.display = 'flex';
-      applyPosition(S.ui.mini, S.miniPos, '16px', '16px');
+      clampPos(S.ui.mini, S.miniPos);
+      applyPosition(S.ui.mini, S.miniPos, '0px', '0px');
     } else {
       S.ui.chat.style.display = 'flex';
       S.ui.mini.style.display = 'none';
+      clampPos(S.ui.chat, S.chatPos);
       applyPosition(S.ui.chat, S.chatPos, '0px', '0px');
       S.unreadPerTab.chat = 0;
       renderTabBadges();
