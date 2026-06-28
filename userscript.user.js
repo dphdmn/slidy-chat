@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.25
+// @version      0.0.26
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -1112,10 +1112,10 @@
   .sc-mini-badge { position: absolute; top: -4px; right: -4px; background: #ff2262; color: #fff;
     font-size: 10px; padding: 0 4px; border-radius: 8px; min-width: 16px; text-align: center; font-weight: 700; }
 
-  .sc-toast { pointer-events: auto; position: absolute; bottom: 16px; right: 16px; background: #161616;
+  .sc-toast { pointer-events: auto; position: fixed; bottom: 16px; right: 16px; background: #161616;
     border: 1px solid #00bcd4; border-radius: 4px; padding: 8px 14px; color: #e8e8e8; font-size: 12px;
-    box-shadow: 0 0 12px rgba(0,188,212,0.2); animation: sc-fadein .2s; max-width: 280px;
-    word-wrap: break-word; }
+    box-shadow: 0 0 12px rgba(0,188,212,0.2); animation: sc-fadein .2s; max-width: 320px;
+    word-wrap: break-word; z-index: 2147483647; }
 
   .sc-modal-bg { pointer-events: auto; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
     backdrop-filter: blur(4px); z-index: 2147483647; display: flex; align-items: center; justify-content: center; }
