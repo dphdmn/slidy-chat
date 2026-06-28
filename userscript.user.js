@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.15
+// @version      0.0.16
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
-// @grant        none
+// @grant        GM_info
 // @run-at       document-idle
 // @license      MIT
 // @icon         data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🥚</text></svg>
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.15';
+  const VERSION = GM_info.script.version;
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
