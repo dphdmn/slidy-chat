@@ -49,7 +49,10 @@
     bridgeOpen: false,
     myId: null,
     myName: null,
-    myColor: '#00f1ff',
+    myColor: (() => {
+      const colors = ['#00f1ff','#ff6b9d','#ffd93d','#6bcb77','#a855f7','#fb923c','#60a5fa','#f472b6','#34d399','#fbbf24','#818cf8','#e879f9'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    })(),
     authed: false,
     connState: 'disconnected',
     reconnectDelay: RECONNECT_MIN,
@@ -182,13 +185,36 @@
   // USERNAME EXTRACTION
   // ===========================================================================
   function getUsername() {
-    try {
-      const el = document.querySelector('.user-menu .username');
-      if (el && el.textContent && el.textContent.trim()) {
-        return el.textContent.trim().slice(0, 32);
-      }
-    } catch (e) { /* ignore */ }
-    return randomEggName();
+    return new Promise((resolve) => {
+      try {
+        const el = document.querySelector('.user-menu .username');
+        if (el && el.textContent && el.textContent.trim()) {
+          resolve(el.textContent.trim().slice(0, 32));
+          return;
+        }
+      } catch (e) { /* ignore */ }
+      const obs = new MutationObserver(() => {
+        try {
+          const el = document.querySelector('.user-menu .username');
+          if (el && el.textContent && el.textContent.trim()) {
+            obs.disconnect();
+            resolve(el.textContent.trim().slice(0, 32));
+          }
+        } catch (e) { /* ignore */ }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => {
+        obs.disconnect();
+        try {
+          const el = document.querySelector('.user-menu .username');
+          if (el && el.textContent && el.textContent.trim()) {
+            resolve(el.textContent.trim().slice(0, 32));
+          } else {
+            resolve(randomEggName());
+          }
+        } catch (e) { resolve(randomEggName()); }
+      }, 5000);
+    });
   }
 
   // ===========================================================================
@@ -346,9 +372,9 @@
   // ===========================================================================
   // MESSAGE HANDLERS (server -> client)
   // ===========================================================================
-  function handleMessage(data) {
+  async function handleMessage(data) {
     switch (data.type) {
-      case 'hello':            onHello(data); break;
+      case 'hello':            await onHello(data); break;
       case 'auth_ok':          onAuthOk(data); break;
       case 'auth_fail':        onAuthFail(data); break;
       case 'presence':         onPresence(data); break;
@@ -373,17 +399,17 @@
     }
   }
 
-  function onHello() {
-    dlog('Received hello from server, sending auth…');
+  async function onHello() {
+    dlog('Received hello from server, sending auth\u2026');
     const pw = getPassword();
     if (!pw) {
-      dlog('No password set, prompting user…', 'warn');
-      toast('No password set. Open settings (⚙) to enter one.');
+      dlog('No password set, prompting user\u2026', 'warn');
+      toast('No password set. Open settings (\u2699) to enter one.');
       setConnState('error');
       disconnect();
       return;
     }
-    S.myName = getUsername();
+    S.myName = await getUsername();
     dlog('Authenticating as: ' + S.myName);
     send({
       type: 'auth', password: pw, name: S.myName, color: S.myColor,
@@ -422,7 +448,7 @@
     S.users.set(data.user.id, data.user);
     renderUsers();
     renderOnlineCount();
-    if (data.user.id !== S.myId) addSystemMessage(data.user.name + ' joined', null);
+    if (data.user.id !== S.myId) addSystemMessage(data.user.name + ' joined');
   }
 
   function onUserLeave(data) {
@@ -434,7 +460,7 @@
     renderUsers();
     renderOnlineCount();
     renderTyping();
-    if (u) addSystemMessage(u.name + ' left', null);
+    if (u) addSystemMessage(u.name + ' left');
   }
 
   function onUserRenamed(data) {
@@ -742,6 +768,7 @@
             moves: solve.moves,
             tps: solve.tps,
             isDNF: false,
+            sessionMean: solve.sessionMean,
           });
         }
       }
@@ -767,11 +794,27 @@
     const solveNumber = parseInt(headerText.replace(/\D/g, ''), 10) || null;
     const sn = document.querySelector('.session-name');
     const session = sn ? sn.textContent.trim() : 'Unknown';
+    const sessionMean = getSessionMean(container);
     return {
       session: session, solveNumber: solveNumber,
       time: timeText, moves: movesText, tps: tpsText,
-      isDNF: /dnf/i.test(timeText),
+      isDNF: /dnf/i.test(timeText), sessionMean: sessionMean,
     };
+  }
+
+  function getSessionMean(container) {
+    const rows = container.querySelectorAll('tr[avg]');
+    for (const row of rows) {
+      const avg = row.getAttribute('avg');
+      if (avg && avg !== '1') {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 2) {
+          const t = (cells[1] && cells[1].textContent || '').trim();
+          if (t && !/^[A-Z/]+$/i.test(t)) return t;
+        }
+      }
+    }
+    return null;
   }
 
   const detectAndSendStatus = debounce((force) => {
@@ -787,13 +830,12 @@
   function startObservers() {
     if (S.observer) S.observer.disconnect();
     S.observer = new MutationObserver((mutations) => {
-      // Timer spam filter (mirrors slidywebscripts)
-      if (mutations.length === 3 && mutations[0].target &&
-          mutations[0].target.closest && mutations[0].target.closest('tr[avg="1"]')) return;
       S.observer.disconnect();
       try {
+        const isTimerUpdate = mutations.length === 3 && mutations[0].target &&
+          mutations[0].target.closest && mutations[0].target.closest('tr[avg="1"]');
         if (S.authed && S.shareStatus) detectAndSendStatus(false);
-        if (S.authed && S.shareActivity) detectSolve(mutations);
+        if (S.authed && S.shareActivity && !isTimerUpdate) detectSolve(mutations);
       } catch (e) {
         console.error('[slidy-chat] observer error', e);
       }
@@ -891,7 +933,7 @@
     background: #1c1c1c; flex-shrink: 0; align-items: flex-end; }
   .sc-input { flex: 1; background: #0e0e0e; border: 1px solid #2a2a2a; color: #e8e8e8;
     font-family: inherit; font-size: 12px; padding: 6px 8px; border-radius: 4px;
-    resize: none; min-height: 30px; max-height: 80px; line-height: 1.4;
+    resize: none; min-height: 48px; max-height: 120px; line-height: 1.4;
     transition: border-color .15s, box-shadow .15s; }
   .sc-input:focus { outline: none; border-color: #00bcd4; box-shadow: 0 0 6px rgba(0,188,212,0.3); }
   .sc-input::placeholder { color: #555; }
@@ -1065,7 +1107,7 @@
   .sc-log-error .sc-log-msg { color: #ff9999; }
 
   /* Input fix: no scrollbar overflow, better min-height */
-  .sc-input { min-height: 36px !important; line-height: 1.5 !important;
+  .sc-input { min-height: 48px !important; line-height: 1.5 !important;
     scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
   .sc-input::-webkit-scrollbar { width: 5px; }
   .sc-input::-webkit-scrollbar-track { background: transparent; }
@@ -1205,8 +1247,8 @@
 
   function autoGrowInput() {
     const el = S.ui.input;
-    el.style.height = '36px';
-    el.style.height = Math.min(100, el.scrollHeight) + 'px';
+    el.style.height = '48px';
+    el.style.height = Math.min(120, el.scrollHeight) + 'px';
   }
 
   function submitInput() {
@@ -1569,14 +1611,21 @@
     const userEl = document.createElement('span');
     userEl.className = 'sc-act-user';
     userEl.style.color = ev.color || '#00f1ff';
-    userEl.textContent = ev.name || 'unknown';
-    const actionEl = document.createElement('span');
-    actionEl.className = 'sc-act-action';
-    actionEl.textContent = 'solved';
+    userEl.textContent = (ev.name || 'unknown') + ':';
     const timeEl = document.createElement('span');
     timeEl.className = 'sc-act-time-val';
     timeEl.textContent = ev.time || '';
-    row.appendChild(userEl); row.appendChild(actionEl); row.appendChild(timeEl);
+    row.appendChild(userEl); row.appendChild(timeEl);
+    if (ev.solveNumber != null) {
+      const numEl = document.createElement('span');
+      numEl.className = 'sc-act-meta';
+      if (ev.sessionMean) {
+        numEl.textContent = '(' + ev.solveNumber + ' / ' + ev.sessionMean + ')';
+      } else {
+        numEl.textContent = '#' + ev.solveNumber;
+      }
+      row.appendChild(numEl);
+    }
     if (ev.isDNF) {
       const dnfEl = document.createElement('span');
       dnfEl.className = 'sc-act-dnf';
@@ -1591,8 +1640,7 @@
     const metaEl = document.createElement('div');
     metaEl.className = 'sc-act-meta';
     const metaParts = [];
-    if (ev.session) metaParts.push(ev.session);
-    if (ev.solveNumber != null) metaParts.push('#' + ev.solveNumber);
+    if (ev.session) metaParts.push('in session ' + ev.session);
     if (ev.moves) metaParts.push(ev.moves + ' moves');
     if (ev.tps) metaParts.push(ev.tps + ' tps');
     metaEl.textContent = metaParts.join(' · ');
@@ -2082,6 +2130,10 @@
     startObservers();
     // Heartbeat
     setInterval(() => { if (S.authed) send({ type: 'ping' }); }, 30000);
+    // Periodic status check fallback
+    setInterval(() => {
+      if (S.authed && S.shareStatus) detectAndSendStatus(true);
+    }, 3000);
     // Typing expiry check
     setInterval(() => {
       if (S.typingUsers.size > 0) renderTyping();
