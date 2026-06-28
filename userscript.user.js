@@ -214,8 +214,16 @@
     S.bridgeOpen = false;
     S.authed = false;
 
+    if (S.connTimer) { clearTimeout(S.connTimer); S.connTimer = null; }
+    S.connTimer = setTimeout(() => {
+      if (!S.bridgeOpen) {
+        dlog('Bridge timeout: no __BRIDGE_OPEN__ after 10s. Iframe loaded? ' + (S.bridgeIframe && S.bridgeIframe.contentWindow ? 'yes' : 'no'), 'error');
+        dlog('Iframe src: ' + (S.bridgeIframe ? S.bridgeIframe.src : '(none)'), 'error');
+      }
+    }, 10000);
+
     const iframe = document.createElement('iframe');
-    iframe.src = SERVER_ORIGIN + '/';
+    iframe.src = SERVER_ORIGIN + '/?_=' + Date.now();
     iframe.style.cssText = 'display:none!important;width:1px;height:1px;border:0;position:absolute;left:-9999px';
     iframe.setAttribute('tabindex', '-1');
     iframe.setAttribute('aria-hidden', 'true');
@@ -292,13 +300,19 @@
       if (typeof data !== 'string') return;
 
       if (data === '__BRIDGE_OPEN__') {
+        if (S.connTimer) { clearTimeout(S.connTimer); S.connTimer = null; }
         S.bridgeOpen = true;
         dlog('Bridge connected, waiting for hello\u2026');
         S.reconnectDelay = RECONNECT_MIN;
         setConnState('connected');
         return;
       }
+      if (data.startsWith('__BRIDGE_LOG__,')) {
+        dlog('[bridge] ' + data.slice(14));
+        return;
+      }
       if (data.startsWith('__BRIDGE_CLOSE__,')) {
+        if (S.connTimer) { clearTimeout(S.connTimer); S.connTimer = null; }
         S.authed = false;
         S.bridgeOpen = false;
         const parts = data.split(',');
