@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.11
+// @version      0.0.12
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI. TLS + Origin-locked.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -21,7 +21,7 @@
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
     || 'wss://slidychat.duckdns.org/ws'; // <-- CHANGE THIS to your server's WSS URL
   const SERVER_ORIGIN = new URL(SERVER_URL.replace(/^wss?:\/\//, 'https://')).origin;
-  const VERSION = '0.0.11';
+  const VERSION = '0.0.12';
   const STORAGE_KEY = 'slidysim_chat_settings_v3';
   const PASSWORD_KEY = 'slidysim_chat_password_v3';
   const MAX_RENDERED = 200;
@@ -532,7 +532,9 @@
     if (S.tab !== 'activity') { S.unreadPerTab.activity++; renderTabBadges(); return; }
     const visible = S.activityFilter.user === 'all' && !S.activityFilter.hidden.has(data.name);
     if (visible) {
-      S.ui.actList.prepend(createActivityEl(data));
+      const el = createActivityEl(data);
+      el.classList.add('sc-act-new');
+      S.ui.actList.prepend(el);
       const empty = S.ui.actList.querySelector('.sc-empty');
       if (empty) empty.remove();
       while (S.ui.actList.children.length > 300) S.ui.actList.lastChild.remove();
@@ -999,7 +1001,8 @@
   .sc-act-list::-webkit-scrollbar { width: 6px; }
   .sc-act-list::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
   .sc-act-item { padding: 5px 8px; margin-bottom: 4px; border: 1px solid #2a2a2a; border-left: 3px solid #2a2a2a; border-radius: 4px;
-    font-size: 11px; background: #181818; animation: sc-fadein .12s; }
+    font-size: 11px; background: #181818; }
+  .sc-act-new { animation: sc-fadein .15s ease-out; }
   .sc-act-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .sc-act-user { font-weight: 700; text-shadow: 0 0 5px currentColor; }
   .sc-act-action { color: #888; }
