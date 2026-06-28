@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.20
+// @version      0.0.21
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -464,11 +464,13 @@
   function onUserLeave(data) {
     const u = S.users.get(data.userId);
     S.users.delete(data.userId);
+    S.recentJoins = S.recentJoins.filter(j => j.id !== data.userId);
     for (const key of S.typingUsers.keys()) {
       if (key.startsWith(data.userId + '|')) S.typingUsers.delete(key);
     }
     renderUsers();
     renderOnlineCount();
+    renderRecentUsers();
     renderTyping();
     if (u) addSystemMessage(u.name + ' left');
   }
@@ -1162,6 +1164,16 @@
   .sc-input::-webkit-scrollbar-track { background: transparent; }
   .sc-input::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
   .sc-input::-webkit-scrollbar-thumb:hover { background: #555; }
+  .sc-mention-wrap { position: relative; flex: 1; display: flex; }
+  .sc-mention-dropdown { position: absolute; bottom: 100%; left: 0; right: 0; max-height: 160px; overflow-y: auto;
+    background: #1a1a1a; border: 1px solid #3a3a3a; border-bottom: none; border-radius: 4px 4px 0 0;
+    z-index: 100; scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+  .sc-mention-dropdown::-webkit-scrollbar { width: 5px; }
+  .sc-mention-dropdown::-webkit-scrollbar-track { background: transparent; }
+  .sc-mention-dropdown::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+  .sc-mention-item { padding: 4px 8px; cursor: pointer; font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+  .sc-mention-item:hover, .sc-mention-item.selected { background: rgba(0,188,212,0.12); color: #e8e8e8; }
+  .sc-mention-item .sc-mention-color { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
   /* Global scrollbar styling for all scrollable areas */
   .sc-msgs, .sc-act-list, .sc-users-list, .sc-groups-list, .sc-settings, .sc-logs-list, .sc-emoji-panel {
@@ -1214,7 +1226,10 @@
             <div class="sc-emoji-panel" id="emojiPanel"></div>
             <div class="sc-input-wrap">
               <button class="sc-emoji-btn" id="emojiBtn" title="Emoji">🥚</button>
-              <textarea class="sc-input" id="input" placeholder="Type a message… (Enter=send, Shift+Enter=newline)" rows="1"></textarea>
+              <div class="sc-mention-wrap">
+                <textarea class="sc-input" id="input" placeholder="Type a message… (Enter=send, Shift+Enter=newline)" rows="1"></textarea>
+                <div class="sc-mention-dropdown" id="mentionDropdown" style="display:none"></div>
+              </div>
               <button class="sc-send" id="send">Send</button>
             </div>
             <div class="sc-new-msgs" id="newMsgs" style="display:none">↓ New messages</div>
@@ -1251,7 +1266,7 @@
       tabs: $('tabs'), body: $('body'),
       chatTarget: $('chatTarget'), msgs: $('msgs'), typing: $('typing'),
       emojiPanel: $('emojiPanel'), emojiBtn: $('emojiBtn'),
-      input: $('input'), send: $('send'), newMsgs: $('newMsgs'),
+      input: $('input'), send: $('send'), newMsgs: $('newMsgs'), mentionDropdown: $('mentionDropdown'),
       actUserFilter: $('actUserFilter'), actList: $('actList'), actHidden: $('actHidden'),
       usersList: $('usersList'), groupsList: $('groupsList'), settings: $('settings'),
       mini: $('mini'), miniBadge: $('miniBadge'), toast: $('toast'),
@@ -1283,9 +1298,15 @@
       renderChatMessages();
     });
     S.ui.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitInput(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitInput(); return; }
+      if (S.ui.mentionDropdown.style.display !== 'none') {
+        if (e.key === 'ArrowDown') { e.preventDefault(); selectNextMention(1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); selectNextMention(-1); return; }
+        if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptMention(); return; }
+        if (e.key === 'Escape') { closeMentionDropdown(); return; }
+      }
     });
-    S.ui.input.addEventListener('input', () => { autoGrowInput(); sendTyping(true); });
+    S.ui.input.addEventListener('input', () => { autoGrowInput(); sendTyping(true); updateMention(); });
     S.ui.send.addEventListener('click', submitInput);
     S.ui.emojiBtn.addEventListener('click', () => S.ui.emojiPanel.classList.toggle('open'));
     S.ui.msgs.addEventListener('scroll', onMsgsScroll);
@@ -1301,6 +1322,7 @@
     S.ui.input.addEventListener('keydown', (e) => e.stopPropagation(), false);
     S.ui.input.addEventListener('keyup', (e) => e.stopPropagation(), false);
 
+    S.ui.input.addEventListener('blur', () => setTimeout(closeMentionDropdown, 200));
     window.addEventListener('resize', onResize);
   }
 
@@ -1326,6 +1348,80 @@
     const el = S.ui.input;
     el.style.height = '48px';
     el.style.height = Math.min(120, el.scrollHeight) + 'px';
+  }
+
+  let mentionIndex = -1;
+  let mentionResults = [];
+
+  function updateMention() {
+    const el = S.ui.input;
+    const pos = el.selectionStart;
+    const val = el.value;
+    const before = val.slice(0, pos);
+    const match = before.match(/@(\w*)$/);
+    if (!match) { closeMentionDropdown(); return; }
+    const query = match[1].toLowerCase();
+    const users = Array.from(S.users.values()).filter(u => u.name !== 'Egg' && !u.isAdmin && u.name.toLowerCase().includes(query));
+    if (users.length === 0) { closeMentionDropdown(); return; }
+    mentionResults = users;
+    mentionIndex = 0;
+    const dd = S.ui.mentionDropdown;
+    dd.innerHTML = '';
+    for (let i = 0; i < users.length; i++) {
+      const item = document.createElement('div');
+      item.className = 'sc-mention-item' + (i === 0 ? ' selected' : '');
+      const dot = document.createElement('span');
+      dot.className = 'sc-mention-color';
+      dot.style.background = users[i].color || '#00f1ff';
+      item.appendChild(dot);
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = users[i].name;
+      item.appendChild(nameSpan);
+      item.dataset.idx = i;
+      item.addEventListener('mousedown', () => { mentionIndex = i; acceptMention(); });
+      item.addEventListener('mouseenter', () => {
+        dd.querySelectorAll('.sc-mention-item').forEach(e => e.classList.remove('selected'));
+        item.classList.add('selected');
+        mentionIndex = i;
+      });
+      dd.appendChild(item);
+    }
+    dd.style.display = 'block';
+  }
+
+  function selectNextMention(dir) {
+    const items = S.ui.mentionDropdown.querySelectorAll('.sc-mention-item');
+    if (!items.length) return;
+    items[mentionIndex]?.classList.remove('selected');
+    mentionIndex = (mentionIndex + dir + items.length) % items.length;
+    items[mentionIndex].classList.add('selected');
+    items[mentionIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  function acceptMention() {
+    const user = mentionResults[mentionIndex];
+    if (!user) return;
+    const el = S.ui.input;
+    const pos = el.selectionStart;
+    const val = el.value;
+    const before = val.slice(0, pos);
+    const match = before.match(/@(\w*)$/);
+    if (!match) { closeMentionDropdown(); return; }
+    const start = pos - match[0].length;
+    el.value = val.slice(0, start) + '@' + user.name + ' ' + val.slice(pos);
+    const newPos = start + user.name.length + 2;
+    el.selectionStart = el.selectionEnd = newPos;
+    closeMentionDropdown();
+    autoGrowInput();
+    el.focus();
+    sendTyping(true);
+  }
+
+  function closeMentionDropdown() {
+    S.ui.mentionDropdown.style.display = 'none';
+    S.ui.mentionDropdown.innerHTML = '';
+    mentionResults = [];
+    mentionIndex = -1;
   }
 
   function submitInput() {
@@ -1865,6 +1961,16 @@
     nameEl.className = 'sc-user-name';
     nameEl.style.color = u.color || '#00f1ff';
     nameEl.textContent = (u.name || 'unknown') + (isMe ? ' (you)' : '');
+    nameEl.style.cursor = 'pointer';
+    nameEl.title = 'Click to @mention';
+    nameEl.addEventListener('click', () => {
+      S.ui.input.focus();
+      const val = S.ui.input.value;
+      const pos = S.ui.input.selectionStart;
+      S.ui.input.value = val.slice(0, pos) + '@' + u.name + ' ' + val.slice(pos);
+      S.ui.input.selectionStart = S.ui.input.selectionEnd = pos + u.name.length + 2;
+      S.ui.input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     const badgeEl = document.createElement('span');
     badgeEl.className = 'sc-user-badge ' + status;
     badgeEl.textContent = statusLabel;
