@@ -894,7 +894,7 @@
   .sc-chat {
     pointer-events: auto; position: absolute;
     width: 336px; height: 520px; min-height: 200px;
-    background: #161616; border: 1px solid #3a3a3a; border-radius: 6px;
+    background: rgba(22,22,22,0.8); border: 1px solid #3a3a3a; border-radius: 6px;
     box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,188,212,0.08);
     display: flex; flex-direction: column; overflow: hidden;
     animation: sc-fadein .2s ease-out;
