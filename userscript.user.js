@@ -632,6 +632,13 @@
   function sendStatus(state, detail) {
     if (!S.authed) return;
     send({ type: 'status', state: state, detail: detail, share: S.shareStatus });
+    const me = S.users.get(S.myId);
+    if (me) {
+      me.status = S.shareStatus ? state : 'hidden';
+      me.statusDetail = S.shareStatus ? detail : '';
+      me.sharingStatus = S.shareStatus;
+      renderUsers();
+    }
   }
 
   function sendActivity(event) {
@@ -920,6 +927,8 @@
   .sc-msg-admin-tag { font-size: 8px; font-weight: 700; color: #ff2262;
     background: rgba(255,34,98,0.1); border: 1px solid rgba(255,34,98,0.3);
     padding: 0 4px; border-radius: 2px; text-transform: uppercase; letter-spacing: .5px; }
+  .sc-msg-status-tag { font-size: 8px; color: #666; background: #1a1a1a; border: 1px solid #2a2a2a;
+    padding: 0 4px; border-radius: 2px; font-weight: 500; letter-spacing: .3px; }
   .sc-msg.system { text-align: center; color: #555; font-size: 10px; padding: 2px; }
   .sc-msg.system::before { display: none; }
   .sc-msg.mine { background: rgba(0,188,212,0.03); }
@@ -1448,6 +1457,13 @@
       const tag = document.createElement('span');
       tag.className = 'sc-msg-admin-tag';
       tag.textContent = 'ADMIN';
+      header.appendChild(tag);
+    }
+    const user = S.users.get(msg.userId);
+    if (user && user.status && user.sharingStatus !== false && !user.isAdmin && user.status !== 'idle') {
+      const tag = document.createElement('span');
+      tag.className = 'sc-msg-status-tag';
+      tag.textContent = ({ puzzle: 'solving', stats: 'stats', sessions: 'browsing', menu: 'menu' })[user.status] || user.status;
       header.appendChild(tag);
     }
     const timeEl = document.createElement('span');
