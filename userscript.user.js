@@ -61,7 +61,8 @@
     tab: 'chat',
     chatTarget: null,
     minimized: false,
-    pos: { x: null, y: null },
+    chatPos: { x: null, y: null },
+    miniPos: { x: null, y: null },
     isAtBottom: true,
     renderedCount: INITIAL_RENDER,
     lastTypingSent: 0,
@@ -136,7 +137,10 @@
       if (isValidHexColor(s.color)) S.myColor = s.color;
       if (typeof s.shareStatus === 'boolean') S.shareStatus = s.shareStatus;
       if (typeof s.shareActivity === 'boolean') S.shareActivity = s.shareActivity;
-      if (typeof s.pos === 'object' && s.pos) S.pos = s.pos;
+      if (typeof s.chatPos === 'object' && s.chatPos) S.chatPos = s.chatPos;
+      if (typeof s.miniPos === 'object' && s.miniPos) S.miniPos = s.miniPos;
+      // migrate old single pos to chatPos
+      if (typeof s.pos === 'object' && s.pos && !(s.chatPos && s.chatPos.x != null)) S.chatPos = s.pos;
       if (typeof s.minimized === 'boolean') S.minimized = s.minimized;
       if (typeof s.tab === 'string') S.tab = s.tab;
       if (typeof s.serverUrl === 'string' && s.serverUrl) S.settings_serverUrl = s.serverUrl;
@@ -149,7 +153,8 @@
         color: S.myColor,
         shareStatus: S.shareStatus,
         shareActivity: S.shareActivity,
-        pos: S.pos,
+        chatPos: S.chatPos,
+        miniPos: S.miniPos,
         minimized: S.minimized,
         tab: S.tab,
         serverUrl: S.settings_serverUrl || null,
@@ -226,10 +231,12 @@
       dlog('WebSocket closed: code=' + ev.code + ' reason=' + (ev.reason || '(empty)'), ev.code !== 1000 ? 'error' : 'info');
       if (ev.code === 1006) {
         dlog('Code 1006 = WebSocket upgrade failed (server rejected connection).', 'error');
-        dlog('Most likely cause: Origin check failed. The server only accepts connections from https://play.slidysim.com', 'error');
-        dlog('Check server log on VPS: tail -20 ~/slidy-chat/chat.log | grep -i reject', 'error');
-        dlog('If the HTTPS fetch above succeeded, the issue is the Origin check, not TLS.', 'error');
-        toast('Connection rejected by server. Check Logs tab.');
+        dlog('This server does NOT enforce Origin checks (password is the security boundary).', 'error');
+        dlog('Check the HTTPS reachability test above:', 'error');
+        dlog('  \u2022 OK \u2192 server reachable; check server logs for handshake errors', 'error');
+        dlog('  \u2022 Failed \u2192 network/TLS issue (DNS, firewall, cert)', 'error');
+        dlog('Server-side log: tail -20 ~/slidy-chat/chat.log', 'error');
+        toast('Connection rejected. Check Logs tab.');
       }
       setConnState('disconnected');
       scheduleReconnect();
@@ -954,8 +961,8 @@
   .sc-mini { pointer-events: auto; position: absolute; width: 44px; height: 44px; background: #161616;
     border: 1px solid #00bcd4; border-radius: 8px; box-shadow: 0 0 12px rgba(0,188,212,0.3);
     cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px;
-    color: #00f1ff; transition: all .2s; animation: sc-fadein .2s; }
-  .sc-mini:hover { box-shadow: 0 0 20px rgba(0,188,212,0.5); transform: scale(1.05); }
+    color: #00f1ff; animation: sc-fadein .2s; }
+  .sc-mini:hover { box-shadow: 0 0 20px rgba(0,188,212,0.5); transform: scale(1.05); transition: box-shadow .2s, transform .2s; }
   .sc-mini-badge { position: absolute; top: -4px; right: -4px; background: #ff2262; color: #fff;
     font-size: 10px; padding: 0 4px; border-radius: 8px; min-width: 16px; text-align: center; font-weight: 700; }
 
@@ -1105,7 +1112,7 @@
       logsList: $('logsList'), logsCount: $('logsCount'), clearLogsBtn: $('clearLogsBtn'),
     };
 
-    applyPosition(S.ui.chat, '16px', '16px');
+    applyPosition(S.ui.chat, S.chatPos, '16px', '16px');
     if (S.minimized) toggleMinimize(true);
     wireEvents();
     renderSettings();
@@ -1121,7 +1128,6 @@
       if (t) switchTab(t.dataset.tab);
     });
     S.ui.btnMin.addEventListener('click', () => toggleMinimize());
-    S.ui.mini.addEventListener('click', () => toggleMinimize());
     makeDraggable();
     S.ui.chatTarget.addEventListener('change', () => {
       S.chatTarget = S.ui.chatTarget.value === 'main' ? null : S.ui.chatTarget.value;
@@ -1169,14 +1175,18 @@
   // ===========================================================================
   function makeDraggable() {
     let dragging = false, offX = 0, offY = 0, dragTarget = null;
+    let dragMoved = false, dragStartX = 0, dragStartY = 0;
 
     function startDrag(el, e) {
       if (e.target.closest('button')) return;
       dragging = true;
       dragTarget = el;
+      dragMoved = false;
       const rect = el.getBoundingClientRect();
       offX = e.clientX - rect.left;
       offY = e.clientY - rect.top;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
       e.preventDefault();
     }
 
@@ -1185,9 +1195,13 @@
 
     document.addEventListener('mousemove', (e) => {
       if (!dragging || !dragTarget) return;
+      if (!dragMoved && (Math.abs(e.clientX - dragStartX) > 4 || Math.abs(e.clientY - dragStartY) > 4)) {
+        dragMoved = true;
+      }
       let x = clamp(e.clientX - offX, 0, window.innerWidth - dragTarget.offsetWidth);
       let y = clamp(e.clientY - offY, 0, window.innerHeight - dragTarget.offsetHeight);
-      S.pos.x = x; S.pos.y = y;
+      const pos = (dragTarget === S.ui.chat) ? S.chatPos : S.miniPos;
+      pos.x = x; pos.y = y;
       dragTarget.style.left = x + 'px';
       dragTarget.style.top = y + 'px';
       dragTarget.style.right = 'auto';
@@ -1196,12 +1210,17 @@
     document.addEventListener('mouseup', () => {
       if (dragging) { dragging = false; dragTarget = null; saveSettings(); }
     });
+
+    S.ui.mini.addEventListener('click', (e) => {
+      if (dragMoved) { dragMoved = false; return; }
+      toggleMinimize();
+    });
   }
 
-  function applyPosition(el, defaultRight, defaultBottom) {
-    if (S.pos.x != null && S.pos.y != null) {
-      el.style.left = S.pos.x + 'px';
-      el.style.top = S.pos.y + 'px';
+  function applyPosition(el, pos, defaultRight, defaultBottom) {
+    if (pos.x != null && pos.y != null) {
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
       el.style.right = 'auto';
       el.style.bottom = 'auto';
     } else {
@@ -1216,11 +1235,11 @@
     if (toMini) {
       S.ui.chat.style.display = 'none';
       S.ui.mini.style.display = 'flex';
-      applyPosition(S.ui.mini, '16px', '16px');
+      applyPosition(S.ui.mini, S.miniPos, '16px', '16px');
     } else {
       S.ui.chat.style.display = 'flex';
       S.ui.mini.style.display = 'none';
-      applyPosition(S.ui.chat, '16px', '16px');
+      applyPosition(S.ui.chat, S.chatPos, '16px', '16px');
       S.unreadPerTab.chat = 0;
       renderTabBadges();
       renderMiniBadge();
@@ -1802,11 +1821,14 @@
           })},
       ]},
       { title: 'Window', rows: [
-        { label: 'Reset position', desc: 'Move chat back to bottom-right.',
+        { label: 'Reset position', desc: 'Move chat and mini button back to bottom-right.',
           control: createButton('Reset', () => {
-            S.pos = { x: null, y: null };
+            S.chatPos = { x: null, y: null };
+            S.miniPos = { x: null, y: null };
             S.ui.chat.style.left = 'auto'; S.ui.chat.style.top = 'auto';
             S.ui.chat.style.right = '16px'; S.ui.chat.style.bottom = '16px';
+            S.ui.mini.style.left = 'auto'; S.ui.mini.style.top = 'auto';
+            S.ui.mini.style.right = '16px'; S.ui.mini.style.bottom = '16px';
             saveSettings();
           })},
       ]},

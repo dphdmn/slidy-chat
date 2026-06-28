@@ -246,6 +246,7 @@ def _websocket_handshake(conn):
             return False, False
         data.extend(chunk)
         if len(data) > 65536:
+            log("! handshake: request too large (>64KB)")
             return False, False
 
     request = data.decode("utf-8", errors="replace")
@@ -266,6 +267,7 @@ def _websocket_handshake(conn):
     is_websocket = headers.get("upgrade", "").lower() == "websocket"
 
     if not is_websocket:
+        log(f"  HTTP {request_line.strip()} (not WebSocket)")
         if is_admin_path:
             _serve_admin_page(conn)
         else:
@@ -274,6 +276,7 @@ def _websocket_handshake(conn):
 
     key = headers.get("sec-websocket-key")
     if not key:
+        log("! handshake: missing Sec-WebSocket-Key header")
         conn.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         return False, False
 
@@ -761,6 +764,7 @@ def _handle_message(client, raw):
 # ---------------------------------------------------------------------------
 def _handle_client(conn, addr):
     client = Client(conn, addr)
+    log(f"> TCP from {addr[0]}:{addr[1]}")
     try:
         try:
             conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -774,6 +778,7 @@ def _handle_client(conn, addr):
         success, is_admin_path = _websocket_handshake(conn)
         if not success:
             return
+        log(f"< WS upgrade ok ({'admin' if is_admin_path else 'user'} path) from {addr[0]}:{addr[1]}")
         client.send({"type": "hello", "serverName": SERVER_NAME,
                      "maxMessages": MAX_MESSAGES, "version": SERVER_VERSION})
         conn.settimeout(90)
