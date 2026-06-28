@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SlidySim Chat
 // @namespace    dphdmn
-// @version      0.0.26
+// @version      0.0.27
 // @description  Floating public chat for play.slidysim.com — status sharing, solve activity feed, chat groups. Dark neon UI.
 // @author       dphdmn
 // @match        https://play.slidysim.com/*
@@ -649,6 +649,9 @@
     if (!text.trim() || !S.authed) return;
     const msg = buildLocalChat(text);
     appendMessage(msg, true);
+    if (S.myName && new RegExp('@' + S.myName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(text)) {
+      toast('@mentioned yourself: ' + text.slice(0, 80));
+    }
     send({ type: 'chat', text: text, groupId: S.chatTarget });
   }
 
