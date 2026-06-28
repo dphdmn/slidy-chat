@@ -49,6 +49,8 @@ port_owner() {
   return 1
 }
 
+ok() { echo "  ✓ $1"; }
+
 # ---- parse args ----
 PASSWORD="${CHAT_PASSWORD:-}"
 ADMIN_PASSWORD="${CHAT_ADMIN_PASSWORD:-}"
@@ -56,6 +58,8 @@ DOMAIN=""
 CADDY_PORT="443"
 WS_PORT="8080"
 FORCE_CLEAN=0
+DUCKDNS_TOKEN="${CHAT_DUCKDNS_TOKEN:-}"
+DUCKDNS_SUB="${CHAT_DUCKDNS_SUBDOMAIN:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -64,6 +68,8 @@ while [[ $# -gt 0 ]]; do
     --domain)          DOMAIN="$2"; shift 2 ;;
     --port)            CADDY_PORT="$2"; shift 2 ;;
     --ws-port)         WS_PORT="$2"; shift 2 ;;
+    --duckdns-token)   DUCKDNS_TOKEN="$2"; shift 2 ;;
+    --duckdns-subdomain) DUCKDNS_SUB="$2"; shift 2 ;;
     --force)           FORCE_CLEAN=1; shift ;;
     -h|--help)
       cat <<'EOF'
@@ -75,19 +81,31 @@ Usage:
 Options:
   --password PW       User chat password (required)
   --admin-password PW Admin panel password (optional, enables /admin)
-  --domain DOMAIN     Your domain (e.g. chat.example.com). If omitted,
-                      auto-generates <ip>.nip.io (free wildcard DNS)
+  --domain DOMAIN     Your domain (e.g. chat.example.com)
   --port N            Caddy HTTPS port (default 443; use 8443 if not root)
   --ws-port N         Internal Python server port (default 8080)
   --force             Kill OUR previous processes if found, then start
 
-SAFETY: Only kills processes identified as ours (our server.py / our
-Caddyfile). Never kills processes just because they're on a port.
+DuckDNS (recommended — most reliable with Let's Encrypt):
+  --duckdns-subdomain SUB   Your DuckDNS subdomain (e.g. slidychat)
+  --duckdns-token TOKEN     Your DuckDNS token from duckdns.org
 
-The server runs in the background via nohup. Close your terminal freely.
-  ./status.sh  — check if running
-  ./stop.sh    — stop the server
-  chat.log     — view logs
+  Register at https://duckdns.org (free, GitHub/Google login).
+  This auto-updates the DNS to point to your VPS IP.
+
+  Example:
+    sudo ./start.sh --password "SECRET" \
+      --duckdns-subdomain slidychat --duckdns-token abc123-...
+
+If no domain or DuckDNS is specified, auto-generates <ip>.nip.io
+(may not work with all VPS providers due to port 80/firewall issues).
+
+SAFETY: Only kills processes identified as ours. Never kills foreign
+processes like OpenVPN or nginx.
+
+  ./status.sh  — check status
+  ./stop.sh    — stop server
+  ./diagnose.sh — diagnose problems
 EOF
       exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -188,18 +206,43 @@ if systemctl is-active --quiet caddy 2>/dev/null; then
   systemctl disable caddy 2>/dev/null || true
 fi
 
-# ---- detect public IP + generate domain ----
-if [[ -z "$DOMAIN" ]]; then
-  echo "Detecting public IP…"
-  IP=$(curl -s4 https://api.ipify.org 2>/dev/null || curl -s4 https://ifconfig.me/ip 2>/dev/null || true)
-  if [[ -z "$IP" ]]; then
-    echo "Error: cannot detect public IP."
-    echo "  Use --domain to specify your domain manually."
+# ---- detect public IP + set up domain ----
+echo "Detecting public IP…"
+IP=$(curl -s4 https://api.ipify.org 2>/dev/null || curl -s4 https://ifconfig.me/ip 2>/dev/null || true)
+if [[ -z "$IP" ]]; then
+  echo "Error: cannot detect public IP."
+  echo "  Use --domain to specify your domain manually."
+  exit 1
+fi
+echo "  IP: $IP"
+
+# DuckDNS mode (recommended)
+if [[ -n "$DUCKDNS_SUB" ]] && [[ -n "$DUCKDNS_TOKEN" ]]; then
+  echo "Updating DuckDNS: $DUCKDNS_SUB.duckdns.org -> $IP"
+  DUCK_RESULT=$(curl -s4 "https://www.duckdns.org/update?domains=${DUCKDNS_SUB}&token=${DUCKDNS_TOKEN}&ip=${IP}" 2>/dev/null || true)
+  if [[ "$DUCK_RESULT" == "OK" ]]; then
+    ok "DuckDNS updated: ${DUCKDNS_SUB}.duckdns.org -> ${IP}"
+    DOMAIN="${DUCKDNS_SUB}.duckdns.org"
+  elif [[ "$DUCK_RESULT" == "bad token" ]]; then
+    echo "Error: DuckDNS says 'bad token'. Check your token at duckdns.org"
     exit 1
+  else
+    echo "Warning: DuckDNS update returned: '$DUCK_RESULT'"
+    echo "  Continuing anyway (DNS may already be correct)…"
+    DOMAIN="${DUCKDNS_SUB}.duckdns.org"
   fi
+  echo "  Domain: $DOMAIN"
+# Manual domain mode
+elif [[ -n "$DOMAIN" ]]; then
+  echo "  Using provided domain: $DOMAIN"
+# Auto nip.io fallback
+else
   DOMAIN="${IP}.nip.io"
-  echo "  IP: $IP"
-  echo "  Domain: $DOMAIN (nip.io — free wildcard DNS)"
+  echo "  Domain: $DOMAIN (nip.io)"
+  echo "  WARNING: nip.io may not work with all VPS providers."
+  echo "    If cert provisioning fails, use DuckDNS instead:"
+  echo "    --duckdns-subdomain SUB --duckdns-token TOKEN"
+  echo "    (register at https://duckdns.org — free, 30 seconds)"
 fi
 
 # ---- write Caddyfile ----
@@ -286,12 +329,36 @@ fi
 echo "  Log file   : $LOG_FILE"
 echo "========================================"
 echo ""
-echo "  NOTE: First run takes 10-30s for Caddy to provision"
-echo "  the Let's Encrypt certificate. Check ./status.sh"
-echo "  after a bit — if health check fails, wait and retry."
+echo "  Waiting 15s for cert provisioning…"
+sleep 15
+
+# Check if cert was obtained
+CERT_OK=$(grep -c "certificate obtained successfully\|obtained certificate" "$LOG_FILE" 2>/dev/null || true)
+CERT_OK=${CERT_OK:-0}
+CERT_ERR=$(grep -iE "error.*obtain|ACME.*error|challenge.*failed" "$LOG_FILE" 2>/dev/null | tail -3 || true)
+
+if [[ "$CERT_OK" -gt 0 ]]; then
+  echo "  ✓ TLS certificate obtained!"
+elif [[ -n "$CERT_ERR" ]]; then
+  echo "  ✗ Cert provisioning FAILED. Errors from log:"
+  echo "$CERT_ERR" | while IFS= read -r line; do echo "    $line"; done
+  echo ""
+  echo "  Common fixes:"
+  echo "    1. Ensure ports 80 AND 443 are open on your VPS firewall:"
+  echo "       sudo ufw allow 80/tcp && sudo ufw allow 443/tcp"
+  echo "    2. Use DuckDNS (more reliable than nip.io):"
+  echo "       a. Register at https://duckdns.org (free)"
+  echo "       b. sudo ./stop.sh --kill-all"
+  echo "       c. sudo ./start.sh --password 'SECRET' \\"
+  echo "            --duckdns-subdomain YOURSUB --duckdns-token YOURTOKEN"
+  echo "    3. Run ./diagnose.sh for full diagnostics"
+else
+  echo "  ! Cert may still be provisioning. Check ./diagnose.sh"
+fi
 echo ""
-echo "  ./status.sh  — check status"
-echo "  ./stop.sh    — stop server"
+echo "  ./status.sh    — check status"
+echo "  ./stop.sh      — stop server"
+echo "  ./diagnose.sh  — diagnose problems"
 echo "  tail -f $LOG_FILE  — view live logs"
 echo ""
 echo "  You can close this terminal. The server keeps running."

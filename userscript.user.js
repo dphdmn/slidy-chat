@@ -17,7 +17,7 @@
   // CONFIG — change SERVER_URL to your VPS's sslip.io domain (printed by server)
   // ===========================================================================
   const SERVER_URL = (typeof window !== 'undefined' && window.SLIDY_CHAT_SERVER_URL)
-    || 'wss://91.184.252.73.nip.io'; // <-- CHANGE THIS (server prints it on startup)
+    || 'wss://YOUR-VPS-IP.sslip.io'; // <-- CHANGE THIS (server prints it on startup)
   const VERSION = '3.0.0';
   const STORAGE_KEY = 'slidysim_chat_settings_v2';
   const PASSWORD_KEY = 'slidysim_chat_password_v2';

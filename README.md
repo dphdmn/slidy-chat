@@ -50,11 +50,34 @@ curl -sSL https://raw.githubusercontent.com/dphdmn/slidy-chat/main/install.sh | 
 
 This clones the repo and installs Caddy. It does NOT start the server.
 
-### 2. Start (background)
+### 2. Set up DuckDNS (recommended — takes 30 seconds)
+
+TLS requires a domain name. DuckDNS is free and works perfectly with Let's Encrypt:
+
+1. Go to [duckdns.org](https://duckdns.org)
+2. Log in with GitHub, Google, or Reddit
+3. Create a subdomain (e.g. `slidychat`)
+4. Copy your **token** (the UUID shown on the page)
+
+The subdomain + token are all you need. The start script auto-updates the DNS to point to your VPS.
+
+### 3. Open firewall ports
+
+Caddy needs ports 80 + 443 for Let's Encrypt + HTTPS:
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+
+### 4. Start (background)
 
 ```bash
 cd ~/slidy-chat
-sudo ./start.sh --password "USER_SECRET" --admin-password "ADMIN_SECRET"
+sudo ./start.sh --password "USER_SECRET" \
+  --admin-password "ADMIN_SECRET" \
+  --duckdns-subdomain "slidychat" \
+  --duckdns-token "your-duckdns-token-here"
 ```
 
 The server starts in the **background** (via `nohup`). You can close your terminal — the server keeps running.
@@ -64,19 +87,35 @@ Output:
 ========================================
   SlidySim Chat started (background)
 ========================================
-  WSS URL    : wss://203.0.113.42.nip.io
-  Admin panel: https://203.0.113.42.nip.io/admin
+  WSS URL    : wss://slidychat.duckdns.org
+  Admin panel: https://slidychat.duckdns.org/admin
   Log file   : /root/slidy-chat/chat.log
 ========================================
 
-  ./status.sh  — check status
-  ./stop.sh    — stop server
-  tail -f chat.log  — view live logs
+  Waiting 15s for cert provisioning…
+  ✓ TLS certificate obtained!
+
+  ./status.sh    — check status
+  ./stop.sh      — stop server
+  ./diagnose.sh  — diagnose problems
 
   You can close this terminal. The server keeps running.
 ```
 
-### 3. Check status
+**If you don't want DuckDNS**, you can use nip.io (auto-generated from your IP):
+
+```bash
+sudo ./start.sh --password "USER_SECRET" --admin-password "ADMIN_SECRET"
+# → uses <your-ip>.nip.io automatically
+```
+
+Or use your own domain:
+
+```bash
+sudo ./start.sh --password "USER_SECRET" --domain "chat.yourdomain.com"
+```
+
+### 5. Check status
 
 ```bash
 ./status.sh
@@ -103,7 +142,7 @@ Output:
   Stop with: ./stop.sh
 ```
 
-### 4. Stop
+### 6. Stop
 
 ```bash
 ./stop.sh
@@ -253,20 +292,53 @@ slidy-chat/
 
 ## Troubleshooting
 
+### First step: run diagnostics
+
+```bash
+./diagnose.sh
+```
+
+This checks everything: Python server, Caddy, ports, DNS, firewall, TLS certificate, ACME logs. It tells you exactly what's wrong and how to fix it.
+
 ### "Caddy is not installed"
 Run `./install.sh` first. Or install Caddy manually: [caddyserver.com/docs/install](https://caddyserver.com/docs/install)
 
-### Certificate provisioning fails
-1. Ensure ports 80 + 443 are open on your VPS firewall
-2. Try `--staging` flag in start.sh for testing (not implemented yet — use Caddy's built-in staging)
-3. Check `chat.log` for Caddy error messages
-4. Verify your public IP: `curl https://api.ipify.org`
+### Certificate provisioning fails (Yahoo redirect, "cert for wrong domain", etc.)
+
+This means Caddy couldn't get a Let's Encrypt certificate. Common causes:
+
+1. **Ports 80 or 443 are blocked.** Open them:
+   ```bash
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   ```
+   Let's Encrypt needs port 80 for the HTTP-01 challenge (or 443 for TLS-ALPN-01).
+
+2. **Using nip.io and it doesn't work with your VPS provider.** Switch to DuckDNS:
+   - Register at [duckdns.org](https://duckdns.org) (free, 30 seconds)
+   - Create a subdomain, copy your token
+   - `sudo ./stop.sh --kill-all`
+   - `sudo ./start.sh --password "X" --duckdns-subdomain "yoursub" --duckdns-token "yourtoken"`
+
+3. **Caddy never started.** Check `./diagnose.sh` — is Caddy running? If not, check `chat.log` for errors.
+
+4. **System Caddy service is running.** `start.sh` stops it automatically, but if it persists:
+   ```bash
+   sudo systemctl stop caddy
+   sudo systemctl disable caddy
+   ```
 
 ### "Port 443 requires root"
 Use `sudo`, or: `./start.sh --password "SECRET" --port 8443`
 
+### "Port 8080 is already in use"
+Another process (maybe OpenVPN, nginx) is on port 8080. Use a different port:
+```bash
+sudo ./start.sh --password "SECRET" --ws-port 8081
+```
+
 ### Health check shows "unreachable"
-Caddy may still be provisioning the certificate on first run. Wait 10-30 seconds and run `./status.sh` again.
+Caddy may still be provisioning the certificate on first run. Wait 30 seconds and run `./status.sh` again. If still failing, run `./diagnose.sh`.
 
 ### Admin panel returns 404
 You didn't pass `--admin-password` to `start.sh`. Stop the server, restart with the admin password.
@@ -275,6 +347,7 @@ You didn't pass `--admin-password` to `start.sh`. Stop the server, restart with 
 1. Check `./status.sh` — is the server running?
 2. Check the WSS URL in the userscript matches what `status.sh` shows
 3. Check browser console (F12) for `[slidy-chat]` logs
+4. Run `./diagnose.sh`
 
 ---
 
@@ -285,4 +358,4 @@ MIT.
 ## Credits
 - CSS: [slidyhistory](https://github.com/dphdmn/slidyhistory)
 - Observer patterns: [slidywebscripts](https://github.com/dphdmn/slidywebscripts)
-- TLS: [Caddy](https://caddyserver.com/) + [Let's Encrypt](https://letsencrypt.org/) + [nip.io](https://nip.io/)
+- TLS: [Caddy](https://caddyserver.com/) + [Let's Encrypt](https://letsencrypt.org/) + [DuckDNS](https://duckdns.org/)
